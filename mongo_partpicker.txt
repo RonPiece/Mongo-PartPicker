@@ -1,0 +1,1473 @@
+// ============================================================
+// פרויקט: Mongo-PartPicker
+// מערכת NoSQL לניהול קטלוג חומרה ובניית מפרטי מחשב
+// ============================================================
+
+// ============================================================
+// סעיף 1: הקמת מסד הנתונים והאוספים
+// ============================================================
+
+use MongoPartPicker
+
+db.createCollection("components")
+db.createCollection("builds")
+db.createCollection("users")
+
+show collections
+
+// ============================================================
+// סעיף 2: הכנסת נתונים - אוסף components
+// ============================================================
+
+// --- מעבדים (CPU) - 5 פריטים ---
+
+db.components.insertMany([
+  {
+    _id: ObjectId(),
+    name: "Intel Core i9-14900K",
+    manufacturer: "Intel",
+    price: 589,
+    category: "CPU",
+    release_date: ISODate("2024-10-17"),
+    tags: ["Gaming", "High-End", "Overclockable"],
+    specs: {
+      socket: "LGA1700",
+      cores: 24,
+      threads: 32,
+      base_clock: 3.2,
+      boost_clock: 6.0,
+      tdp: 125
+    },
+    reviews: [
+      { user: "gamer2024", rating: 5, comment: "Best CPU for gaming!", date: ISODate("2024-11-01") },
+      { user: "techreviewer", rating: 4, comment: "Great but runs hot", date: ISODate("2024-11-15") },
+      { user: "pcbuilder", rating: 5, comment: "Amazing performance", date: ISODate("2024-12-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-01"), price: 699 },
+      { date: ISODate("2024-06-01"), price: 649 },
+      { date: ISODate("2024-12-01"), price: 589 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "Intel Core i7-14700K",
+    manufacturer: "Intel",
+    price: 409,
+    category: "CPU",
+    release_date: ISODate("2024-10-17"),
+    tags: ["Gaming", "Mid-Range"],
+    specs: {
+      socket: "LGA1700",
+      cores: 20,
+      threads: 28,
+      base_clock: 3.4,
+      boost_clock: 5.6,
+      tdp: 125
+    },
+    reviews: [
+      { user: "budgetgamer", rating: 5, comment: "Great value!", date: ISODate("2024-11-20") },
+      { user: "streamer1", rating: 4, comment: "Perfect for streaming", date: ISODate("2024-11-25") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-01"), price: 449 },
+      { date: ISODate("2024-12-01"), price: 409 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "AMD Ryzen 9 7950X",
+    manufacturer: "AMD",
+    price: 549,
+    category: "CPU",
+    release_date: ISODate("2024-09-27"),
+    tags: ["Workstation", "High-End", "Multi-threaded"],
+    specs: {
+      socket: "AM5",
+      cores: 16,
+      threads: 32,
+      base_clock: 4.5,
+      boost_clock: 5.7,
+      tdp: 170
+    },
+    reviews: [
+      { user: "videoeditor", rating: 5, comment: "Incredible for rendering!", date: ISODate("2024-10-15") },
+      { user: "developer", rating: 5, comment: "Compiles so fast", date: ISODate("2024-10-20") },
+      { user: "3dartist", rating: 5, comment: "Best for Blender", date: ISODate("2024-11-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-01"), price: 699 },
+      { date: ISODate("2024-06-01"), price: 599 },
+      { date: ISODate("2024-12-01"), price: 549 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "AMD Ryzen 7 7800X3D",
+    manufacturer: "AMD",
+    price: 449,
+    category: "CPU",
+    release_date: ISODate("2024-04-06"),
+    tags: ["Gaming", "3D V-Cache"],
+    specs: {
+      socket: "AM5",
+      cores: 8,
+      threads: 16,
+      base_clock: 4.2,
+      boost_clock: 5.0,
+      tdp: 120
+    },
+    reviews: [
+      { user: "esportspro", rating: 5, comment: "Best gaming CPU period!", date: ISODate("2024-05-10") },
+      { user: "casualgamer", rating: 5, comment: "No bottleneck ever", date: ISODate("2024-06-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-04-06"), price: 499 },
+      { date: ISODate("2024-12-01"), price: 449 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "Intel Core i5-14600K",
+    manufacturer: "Intel",
+    price: 319,
+    category: "CPU",
+    release_date: ISODate("2024-10-17"),
+    tags: ["Budget", "Gaming"],
+    specs: {
+      socket: "LGA1700",
+      cores: 14,
+      threads: 20,
+      base_clock: 3.5,
+      boost_clock: 5.3,
+      tdp: 125
+    },
+    reviews: [
+      { user: "budgetbuilder", rating: 4, comment: "Great for the price", date: ISODate("2024-11-05") }
+    ],
+    price_history: [
+      { date: ISODate("2024-10-17"), price: 329 },
+      { date: ISODate("2024-12-01"), price: 319 }
+    ]
+  }
+])
+
+print("נוספו 5 מעבדים (CPU)")
+
+// --- כרטיסי מסך (GPU) - 4 פריטים ---
+
+db.components.insertMany([
+  {
+    _id: ObjectId(),
+    name: "NVIDIA GeForce RTX 4090",
+    manufacturer: "NVIDIA",
+    price: 1599,
+    category: "GPU",
+    release_date: ISODate("2024-10-12"),
+    tags: ["Gaming", "High-End", "Ray Tracing"],
+    specs: {
+      vram: 24,
+      memory_type: "GDDR6X",
+      cuda_cores: 16384,
+      boost_clock: 2520,
+      power_draw: 450
+    },
+    reviews: [
+      { user: "4kgamer", rating: 5, comment: "4K 120fps is real!", date: ISODate("2024-11-01") },
+      { user: "vrenthusiast", rating: 5, comment: "VR is flawless", date: ISODate("2024-11-10") },
+      { user: "contentcreator", rating: 5, comment: "NVENC is amazing", date: ISODate("2024-11-15") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-01"), price: 1799 },
+      { date: ISODate("2024-06-01"), price: 1699 },
+      { date: ISODate("2024-12-01"), price: 1599 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "NVIDIA GeForce RTX 4070 Ti Super",
+    manufacturer: "NVIDIA",
+    price: 799,
+    category: "GPU",
+    release_date: ISODate("2024-01-24"),
+    tags: ["Gaming", "Mid-Range", "DLSS"],
+    specs: {
+      vram: 16,
+      memory_type: "GDDR6X",
+      cuda_cores: 8448,
+      boost_clock: 2610,
+      power_draw: 285
+    },
+    reviews: [
+      { user: "1440pgamer", rating: 5, comment: "Perfect for 1440p!", date: ISODate("2024-02-15") },
+      { user: "streamer1", rating: 4, comment: "Great encoder", date: ISODate("2024-03-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-24"), price: 849 },
+      { date: ISODate("2024-12-01"), price: 799 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "AMD Radeon RX 7900 XTX",
+    manufacturer: "AMD",
+    price: 899,
+    category: "GPU",
+    release_date: ISODate("2024-12-13"),
+    tags: ["Gaming", "High-End", "FSR"],
+    specs: {
+      vram: 24,
+      memory_type: "GDDR6",
+      stream_processors: 6144,
+      boost_clock: 2500,
+      power_draw: 355
+    },
+    reviews: [
+      { user: "amdlover", rating: 5, comment: "Best AMD card ever!", date: ISODate("2024-01-10") },
+      { user: "linuxgamer", rating: 5, comment: "Open source drivers!", date: ISODate("2024-02-01") },
+      { user: "budgetpro", rating: 4, comment: "Great value vs 4090", date: ISODate("2024-03-15") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-01"), price: 999 },
+      { date: ISODate("2024-12-01"), price: 899 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "NVIDIA GeForce RTX 4060",
+    manufacturer: "NVIDIA",
+    price: 299,
+    category: "GPU",
+    release_date: ISODate("2024-06-29"),
+    tags: ["Budget", "Entry Level", "DLSS"],
+    specs: {
+      vram: 8,
+      memory_type: "GDDR6",
+      cuda_cores: 3072,
+      boost_clock: 2460,
+      power_draw: 115
+    },
+    reviews: [
+      { user: "budgetgamer", rating: 4, comment: "Good for 1080p", date: ISODate("2024-07-15") }
+    ],
+    price_history: [
+      { date: ISODate("2024-06-29"), price: 329 },
+      { date: ISODate("2024-12-01"), price: 299 }
+    ]
+  }
+])
+
+print("נוספו 4 כרטיסי מסך (GPU)")
+
+// --- זיכרון (RAM) - 3 פריטים ---
+
+db.components.insertMany([
+  {
+    _id: ObjectId(),
+    name: "G.Skill Trident Z5 RGB DDR5-6400",
+    manufacturer: "G.Skill",
+    price: 189,
+    category: "RAM",
+    release_date: ISODate("2024-03-15"),
+    tags: ["RGB", "High Speed", "DDR5"],
+    specs: {
+      capacity_gb: 32,
+      speed_mhz: 6400,
+      type: "DDR5",
+      modules: 2,
+      latency: "CL32"
+    },
+    reviews: [
+      { user: "rgblover", rating: 5, comment: "Beautiful RGB!", date: ISODate("2024-04-01") },
+      { user: "overclocker", rating: 5, comment: "Runs stable at 6600", date: ISODate("2024-04-15") },
+      { user: "gamer2024", rating: 4, comment: "Fast but pricey", date: ISODate("2024-05-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-03-15"), price: 249 },
+      { date: ISODate("2024-12-01"), price: 189 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "Corsair Vengeance DDR5-5600",
+    manufacturer: "Corsair",
+    price: 129,
+    category: "RAM",
+    release_date: ISODate("2024-01-10"),
+    tags: ["Value", "DDR5"],
+    specs: {
+      capacity_gb: 32,
+      speed_mhz: 5600,
+      type: "DDR5",
+      modules: 2,
+      latency: "CL36"
+    },
+    reviews: [
+      { user: "budgetbuilder", rating: 4, comment: "Good value DDR5", date: ISODate("2024-02-01") },
+      { user: "firsttimebuilder", rating: 5, comment: "Easy to install", date: ISODate("2024-03-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-10"), price: 159 },
+      { date: ISODate("2024-12-01"), price: 129 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "Kingston Fury Beast DDR4-3200",
+    manufacturer: "Kingston",
+    price: 59,
+    category: "RAM",
+    release_date: ISODate("2023-06-01"),
+    tags: ["Budget", "DDR4", "Legacy"],
+    specs: {
+      capacity_gb: 16,
+      speed_mhz: 3200,
+      type: "DDR4",
+      modules: 2,
+      latency: "CL16"
+    },
+    reviews: [
+      { user: "legacybuilder", rating: 4, comment: "Perfect for older builds", date: ISODate("2023-08-01") }
+    ],
+    price_history: [
+      { date: ISODate("2023-06-01"), price: 79 },
+      { date: ISODate("2024-12-01"), price: 59 }
+    ]
+  }
+])
+
+print("נוספו 3 זיכרונות (RAM)")
+
+// --- אחסון (Storage) - 2 פריטים ---
+
+db.components.insertMany([
+  {
+    _id: ObjectId(),
+    name: "Samsung 990 Pro 2TB",
+    manufacturer: "Samsung",
+    price: 179,
+    category: "Storage",
+    release_date: ISODate("2024-01-15"),
+    tags: ["NVMe", "High Speed", "Gen4"],
+    specs: {
+      capacity_gb: 2000,
+      type: "NVMe SSD",
+      read_speed: 7450,
+      write_speed: 6900,
+      interface: "PCIe 4.0"
+    },
+    reviews: [
+      { user: "fastloading", rating: 5, comment: "Lightning fast!", date: ISODate("2024-02-01") },
+      { user: "gamer2024", rating: 5, comment: "Games load instantly", date: ISODate("2024-02-15") },
+      { user: "videoeditor", rating: 5, comment: "4K editing is smooth", date: ISODate("2024-03-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-01-15"), price: 229 },
+      { date: ISODate("2024-12-01"), price: 179 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "WD Black SN850X 1TB",
+    manufacturer: "Western Digital",
+    price: 89,
+    category: "Storage",
+    release_date: ISODate("2023-09-01"),
+    tags: ["NVMe", "Gaming", "Gen4"],
+    specs: {
+      capacity_gb: 1000,
+      type: "NVMe SSD",
+      read_speed: 7300,
+      write_speed: 6300,
+      interface: "PCIe 4.0"
+    },
+    reviews: [
+      { user: "ps5owner", rating: 5, comment: "Works great in PS5!", date: ISODate("2023-10-01") },
+      { user: "pcmasterrace", rating: 4, comment: "Good but Samsung is faster", date: ISODate("2023-11-01") }
+    ],
+    price_history: [
+      { date: ISODate("2023-09-01"), price: 129 },
+      { date: ISODate("2024-12-01"), price: 89 }
+    ]
+  }
+])
+
+print("נוספו 2 כונני אחסון (Storage)")
+
+// --- לוחות אם (Motherboard) - 2 פריטים ---
+
+db.components.insertMany([
+  {
+    _id: ObjectId(),
+    name: "ASUS ROG Maximus Z790 Hero",
+    manufacturer: "ASUS",
+    price: 629,
+    category: "Motherboard",
+    release_date: ISODate("2024-10-20"),
+    tags: ["High-End", "RGB", "WiFi 7"],
+    specs: {
+      socket: "LGA1700",
+      chipset: "Z790",
+      ram_slots: 4,
+      form_factor: "ATX",
+      max_ram: 192
+    },
+    reviews: [
+      { user: "overclocker", rating: 5, comment: "Best VRMs in the market!", date: ISODate("2024-11-01") },
+      { user: "rgblover", rating: 5, comment: "RGB is stunning", date: ISODate("2024-11-10") },
+      { user: "techreviewer", rating: 4, comment: "Expensive but worth it", date: ISODate("2024-11-15") }
+    ],
+    price_history: [
+      { date: ISODate("2024-10-20"), price: 699 },
+      { date: ISODate("2024-12-01"), price: 629 }
+    ]
+  },
+  {
+    _id: ObjectId(),
+    name: "MSI MAG B650 Tomahawk WiFi",
+    manufacturer: "MSI",
+    price: 219,
+    category: "Motherboard",
+    release_date: ISODate("2024-02-15"),
+    tags: ["Mid-Range", "Value", "AM5"],
+    specs: {
+      socket: "AM5",
+      chipset: "B650",
+      ram_slots: 4,
+      form_factor: "ATX",
+      max_ram: 128
+    },
+    reviews: [
+      { user: "budgetbuilder", rating: 5, comment: "Best value AM5 board", date: ISODate("2024-03-01") },
+      { user: "amdlover", rating: 4, comment: "Great for Ryzen 7000", date: ISODate("2024-04-01") }
+    ],
+    price_history: [
+      { date: ISODate("2024-02-15"), price: 249 },
+      { date: ISODate("2024-12-01"), price: 219 }
+    ]
+  }
+])
+
+print("נוספו 2 לוחות אם (Motherboard)")
+
+// סיכום: 16 רכיבים סה"כ
+print("\n=== סיכום הכנסת רכיבים ===")
+print("סה\"כ רכיבים:", db.components.countDocuments())
+
+// ============================================================
+// הכנסת נתונים - אוסף builds (Referenced Data)
+// ============================================================
+
+// שמירת IDs של הרכיבים לשימוש ב-builds
+var cpu_i9 = db.components.findOne({ name: "Intel Core i9-14900K" })._id
+var cpu_i7 = db.components.findOne({ name: "Intel Core i7-14700K" })._id
+var cpu_ryzen9 = db.components.findOne({ name: "AMD Ryzen 9 7950X" })._id
+var cpu_ryzen7 = db.components.findOne({ name: "AMD Ryzen 7 7800X3D" })._id
+var cpu_i5 = db.components.findOne({ name: "Intel Core i5-14600K" })._id
+
+var gpu_4090 = db.components.findOne({ name: "NVIDIA GeForce RTX 4090" })._id
+var gpu_4070 = db.components.findOne({ name: "NVIDIA GeForce RTX 4070 Ti Super" })._id
+var gpu_7900 = db.components.findOne({ name: "AMD Radeon RX 7900 XTX" })._id
+var gpu_4060 = db.components.findOne({ name: "NVIDIA GeForce RTX 4060" })._id
+
+var ram_gskill = db.components.findOne({ name: "G.Skill Trident Z5 RGB DDR5-6400" })._id
+var ram_corsair = db.components.findOne({ name: "Corsair Vengeance DDR5-5600" })._id
+var ram_kingston = db.components.findOne({ name: "Kingston Fury Beast DDR4-3200" })._id
+
+var ssd_samsung = db.components.findOne({ name: "Samsung 990 Pro 2TB" })._id
+var ssd_wd = db.components.findOne({ name: "WD Black SN850X 1TB" })._id
+
+var mb_asus = db.components.findOne({ name: "ASUS ROG Maximus Z790 Hero" })._id
+var mb_msi = db.components.findOne({ name: "MSI MAG B650 Tomahawk WiFi" })._id
+
+print("נטענו IDs של כל הרכיבים")
+
+// --- מפרטים (Builds) - 6 פריטים ---
+
+db.builds.insertMany([
+  {
+    _id: ObjectId(),
+    build_name: "Ultimate Gaming Rig 2024",
+    creator_name: "gamer2024",
+    usage_type: "Gaming",
+    total_budget: 4000,
+    parts: [cpu_i9, gpu_4090, ram_gskill, ssd_samsung, mb_asus],
+    created_at: ISODate("2024-11-01"),
+    last_updated: ISODate("2024-12-20"),
+    notes: "No compromises - 4K 120fps in any game"
+  },
+  {
+    _id: ObjectId(),
+    build_name: "Content Creator Workstation",
+    creator_name: "videoeditor",
+    usage_type: "Workstation",
+    total_budget: 3500,
+    parts: [cpu_ryzen9, gpu_7900, ram_gskill, ssd_samsung, mb_msi],
+    created_at: ISODate("2024-10-15"),
+    last_updated: ISODate("2024-12-15"),
+    notes: "Optimized for video editing and 3D rendering"
+  },
+  {
+    _id: ObjectId(),
+    build_name: "Sweet Spot Gaming PC",
+    creator_name: "budgetgamer",
+    usage_type: "Gaming",
+    total_budget: 2000,
+    parts: [cpu_ryzen7, gpu_4070, ram_corsair, ssd_wd, mb_msi],
+    created_at: ISODate("2024-09-01"),
+    last_updated: ISODate("2024-11-30"),
+    notes: "Best performance per dollar for 1440p gaming"
+  },
+  {
+    _id: ObjectId(),
+    build_name: "Developer Machine",
+    creator_name: "developer",
+    usage_type: "Workstation",
+    total_budget: 2500,
+    parts: [cpu_ryzen9, gpu_4070, ram_gskill, ssd_samsung, mb_msi],
+    created_at: ISODate("2024-08-01"),
+    last_updated: ISODate("2024-12-01"),
+    notes: "Fast compile times and great for Docker"
+  },
+  {
+    _id: ObjectId(),
+    build_name: "Budget Gaming Build",
+    creator_name: "firsttimebuilder",
+    usage_type: "Budget",
+    total_budget: 1000,
+    parts: [cpu_i5, gpu_4060, ram_corsair, ssd_wd],
+    created_at: ISODate("2024-07-01"),
+    last_updated: ISODate("2024-10-15"),
+    notes: "My first PC build - great for 1080p"
+  },
+  {
+    _id: ObjectId(),
+    build_name: "Old Build - Not Updated",
+    creator_name: "legacybuilder",
+    usage_type: "Budget",
+    total_budget: 800,
+    parts: [cpu_i5, gpu_4060, ram_kingston],
+    created_at: ISODate("2022-01-01"),
+    last_updated: ISODate("2022-06-15"),
+    notes: "This build has not been updated in over a year"
+  }
+])
+
+print("נוספו 6 מפרטים (Builds)")
+
+// ============================================================
+// הכנסת נתונים - אוסף users
+// ============================================================
+
+// שמירת IDs של builds לשימוש ב-users
+var build_ultimate = db.builds.findOne({ build_name: "Ultimate Gaming Rig 2024" })._id
+var build_workstation = db.builds.findOne({ build_name: "Content Creator Workstation" })._id
+var build_sweetspot = db.builds.findOne({ build_name: "Sweet Spot Gaming PC" })._id
+var build_developer = db.builds.findOne({ build_name: "Developer Machine" })._id
+var build_budget = db.builds.findOne({ build_name: "Budget Gaming Build" })._id
+
+db.users.insertMany([
+  {
+    _id: ObjectId(),
+    username: "gamer2024",
+    email: "gamer2024@email.com",
+    registered_date: ISODate("2024-01-15"),
+    saved_builds: [build_ultimate, build_sweetspot],
+    preferences: {
+      preferred_manufacturer: "NVIDIA",
+      budget_range: { min: 2000, max: 5000 },
+      usage: "Gaming"
+    }
+  },
+  {
+    _id: ObjectId(),
+    username: "videoeditor",
+    email: "video.editor@email.com",
+    registered_date: ISODate("2024-02-01"),
+    saved_builds: [build_workstation],
+    preferences: {
+      preferred_manufacturer: "AMD",
+      budget_range: { min: 3000, max: 6000 },
+      usage: "Workstation"
+    }
+  },
+  {
+    _id: ObjectId(),
+    username: "budgetgamer",
+    email: "budget.gamer@email.com",
+    registered_date: ISODate("2024-03-10"),
+    saved_builds: [build_sweetspot, build_budget],
+    preferences: {
+      preferred_manufacturer: "AMD",
+      budget_range: { min: 1000, max: 2500 },
+      usage: "Gaming"
+    }
+  },
+  {
+    _id: ObjectId(),
+    username: "developer",
+    email: "developer@email.com",
+    registered_date: ISODate("2024-04-05"),
+    saved_builds: [build_developer],
+    preferences: {
+      preferred_manufacturer: "AMD",
+      budget_range: { min: 2000, max: 4000 },
+      usage: "Workstation"
+    }
+  },
+  {
+    _id: ObjectId(),
+    username: "firsttimebuilder",
+    email: "newbuilder@email.com",
+    registered_date: ISODate("2024-05-20"),
+    saved_builds: [build_budget],
+    preferences: {
+      preferred_manufacturer: "Intel",
+      budget_range: { min: 500, max: 1500 },
+      usage: "Budget"
+    }
+  }
+])
+
+print("נוספו 5 משתמשים (Users)")
+
+// דוגמה ל-insertOne בודד
+db.users.insertOne({
+  _id: ObjectId(),
+  username: "techreviewer",
+  email: "tech.reviewer@email.com",
+  registered_date: ISODate("2024-06-01"),
+  saved_builds: [],
+  preferences: {
+    preferred_manufacturer: "Intel",
+    budget_range: { min: 1000, max: 10000 },
+    usage: "Testing"
+  }
+})
+
+print("נוסף משתמש נוסף עם insertOne")
+
+// ============================================================
+// סיכום הקמת הנתונים
+// ============================================================
+
+print("\n====================================")
+print("=== סיכום הקמת מסד הנתונים ===")
+print("====================================")
+print("רכיבים (components):", db.components.countDocuments())
+print("מפרטים (builds):", db.builds.countDocuments())
+print("משתמשים (users):", db.users.countDocuments())
+print("====================================\n")
+
+// ============================================================
+// סעיף 4: חיפוש ושליפת נתונים (Find & Query)
+// ============================================================
+
+print("\n===========================================")
+print("=== סעיף 4: שליפות וחיפושים ===")
+print("===========================================\n")
+
+// --- א) שליפה פשוטה עם Projection ---
+// הצגת שם ומחיר בלבד לרכיבים שעולים פחות מ-$500
+print("א) רכיבים מתחת ל-$500 (שם ומחיר בלבד):")
+db.components.find(
+  { price: { $lt: 500 } },
+  { name: 1, price: 1, _id: 0 }
+).pretty()
+
+// --- ב) שליפה מורכבת עם Nested Field ---
+// מציאת מעבדים (CPU) שיש להם יותר מ-8 ליבות
+print("\nב) מעבדים עם יותר מ-8 ליבות:")
+db.components.find(
+  { category: "CPU", "specs.cores": { $gt: 8 } },
+  { name: 1, "specs.cores": 1, "specs.threads": 1, _id: 0 }
+).pretty()
+
+// --- ג) שליפה ממערך פנימי ---
+// מציאת כל הרכיבים שקיבלו דירוג 5 ב-reviews
+print("\nג) רכיבים עם דירוג 5:")
+db.components.find(
+  { "reviews.rating": 5 },
+  { name: 1, "reviews.rating": 1, _id: 0 }
+).pretty()
+
+// --- ד) שימוש ב-$elemMatch ---
+// מציאת רכיב עם ביקורת ספציפית - משתמש מסוים שנתן ציון גבוה
+print("\nד) רכיבים עם ביקורת של gamer2024 שנתן ציון 5:")
+db.components.find(
+  { reviews: { $elemMatch: { user: "gamer2024", rating: 5 } } },
+  { name: 1, reviews: 1, _id: 0 }
+).pretty()
+
+// --- ה) שימוש ב-sort, limit, skip (דפדוף) ---
+// דף 1: 3 הרכיבים היקרים ביותר
+print("\nה) דף 1 - 3 הרכיבים היקרים ביותר:")
+db.components.find(
+  {},
+  { name: 1, price: 1, category: 1, _id: 0 }
+).sort({ price: -1 }).limit(3).pretty()
+
+// דף 2: 3 הרכיבים הבאים (skip 3)
+print("\nדף 2 - הרכיבים הבאים (skip 3):")
+db.components.find(
+  {},
+  { name: 1, price: 1, category: 1, _id: 0 }
+).sort({ price: -1 }).skip(3).limit(3).pretty()
+
+// --- ו) שימוש ב-Regex ---
+// מציאת כל הרכיבים של יצרנים שמתחילים ב-"N"
+print("\nו) יצרנים שמתחילים ב-N:")
+db.components.find(
+  { manufacturer: /^N/ },
+  { name: 1, manufacturer: 1, _id: 0 }
+).pretty()
+
+// חיפוש עם Regex - שמות שמכילים "RTX"
+print("\nחיפוש שמות שמכילים RTX:")
+db.components.find(
+  { name: /RTX/ },
+  { name: 1, price: 1, _id: 0 }
+).pretty()
+
+// --- ז) שימוש ב-count ---
+print("\nז) ספירת רכיבים לפי קטגוריה:")
+print("מספר מעבדים (CPU):", db.components.countDocuments({ category: "CPU" }))
+print("מספר כרטיסי מסך (GPU):", db.components.countDocuments({ category: "GPU" }))
+print("מספר זיכרונות (RAM):", db.components.countDocuments({ category: "RAM" }))
+print("מספר כונני אחסון (Storage):", db.components.countDocuments({ category: "Storage" }))
+print("מספר לוחות אם (Motherboard):", db.components.countDocuments({ category: "Motherboard" }))
+
+// --- ח) שימוש ב-forEach ---
+print("\nח) הדפסת שמות כל הרכיבים עם forEach:")
+db.components.find({}, { name: 1, _id: 0 }).forEach(function(doc) {
+  print("  - " + doc.name)
+})
+
+// --- ט) שימוש ב-toArray ---
+print("\nט) המרה למערך ועיבוד:")
+var componentsArray = db.components.find(
+  { price: { $gt: 500 } },
+  { name: 1, price: 1, _id: 0 }
+).toArray()
+
+print("מספר רכיבים מעל $500:", componentsArray.length)
+componentsArray.forEach(function(item) {
+  print("  " + item.name + " - $" + item.price)
+})
+
+// --- י) שימוש ב-$or ו-$and ---
+print("\nי) רכיבים של Intel או AMD במחיר מתחת ל-$600:")
+db.components.find({
+  $and: [
+    { $or: [{ manufacturer: "Intel" }, { manufacturer: "AMD" }] },
+    { price: { $lt: 600 } }
+  ]
+}, { name: 1, manufacturer: 1, price: 1, _id: 0 }).pretty()
+
+// --- יא) שימוש ב-$exists ---
+print("\nיא) רכיבים עם שדה cuda_cores (כרטיסי NVIDIA):")
+db.components.find(
+  { "specs.cuda_cores": { $exists: true } },
+  { name: 1, "specs.cuda_cores": 1, _id: 0 }
+).pretty()
+
+// --- יב) שימוש ב-$all ---
+print("\nיב) רכיבים עם כל התגים Gaming ו-High-End:")
+db.components.find(
+  { tags: { $all: ["Gaming", "High-End"] } },
+  { name: 1, tags: 1, _id: 0 }
+).pretty()
+
+// --- יג) שימוש ב-$in ---
+print("\nיג) רכיבים מקטגוריות CPU או GPU:")
+db.components.find(
+  { category: { $in: ["CPU", "GPU"] } },
+  { name: 1, category: 1, _id: 0 }
+).pretty()
+
+// --- יד) טווח מחירים ---
+print("\nיד) רכיבים במחיר בין $200 ל-$500:")
+db.components.find(
+  { price: { $gte: 200, $lte: 500 } },
+  { name: 1, price: 1, _id: 0 }
+).sort({ price: 1 }).pretty()
+
+// --- טו) פונקציה עוטפת לחיפוש ---
+function findComponentsByPriceRange(minPrice, maxPrice) {
+  return db.components.find(
+    { price: { $gte: minPrice, $lte: maxPrice } },
+    { name: 1, price: 1, category: 1, _id: 0 }
+  ).toArray()
+}
+
+print("\nטו) שימוש בפונקציה עוטפת - רכיבים בין $100 ל-$300:")
+var results = findComponentsByPriceRange(100, 300)
+results.forEach(function(item) {
+  print("  " + item.name + " (" + item.category + ") - $" + item.price)
+})
+
+// --- טז) שליפות מאוסף builds ---
+print("\nטז) כל המפרטים מסוג Gaming:")
+db.builds.find(
+  { usage_type: "Gaming" },
+  { build_name: 1, creator_name: 1, total_budget: 1, _id: 0 }
+).pretty()
+
+// --- יז) שליפות מאוסף users ---
+print("\nיז) משתמשים שמעדיפים AMD:")
+db.users.find(
+  { "preferences.preferred_manufacturer": "AMD" },
+  { username: 1, "preferences.usage": 1, _id: 0 }
+).pretty()
+
+// ============================================================
+// סעיף 5: עדכונים ומחיקות (Updates & Deletes)
+// ============================================================
+
+print("\n===========================================")
+print("=== סעיף 5: עדכונים ומחיקות ===")
+print("===========================================\n")
+
+// --- א) $set - עדכון שדה ---
+print("א) עדכון שדה עם $set:")
+print("לפני העדכון:")
+db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, tags: 1, _id: 0 }).pretty()
+
+db.components.updateOne(
+  { name: "Intel Core i5-14600K" },
+  { $set: { "specs.tdp": 130, is_featured: true } }
+)
+
+print("אחרי העדכון:")
+db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, "specs.tdp": 1, is_featured: 1, _id: 0 }).pretty()
+
+// --- ב) $inc - העלאת מחיר ---
+print("\nב) העלאת מחיר ב-$50 לכל מוצרי Intel:")
+print("מחירים לפני:")
+db.components.find({ manufacturer: "Intel" }, { name: 1, price: 1, _id: 0 }).pretty()
+
+db.components.updateMany(
+  { manufacturer: "Intel" },
+  { $inc: { price: 50 } }
+)
+
+print("מחירים אחרי:")
+db.components.find({ manufacturer: "Intel" }, { name: 1, price: 1, _id: 0 }).pretty()
+
+// החזרת המחיר לנורמלי
+db.components.updateMany(
+  { manufacturer: "Intel" },
+  { $inc: { price: -50 } }
+)
+print("הוחזרו המחירים המקוריים")
+
+// --- ג) $push - הוספת ביקורת חדשה ---
+print("\nג) הוספת ביקורת חדשה עם $push:")
+db.components.updateOne(
+  { name: "AMD Ryzen 7 7800X3D" },
+  { 
+    $push: { 
+      reviews: {
+        user: "newreviewer",
+        rating: 5,
+        comment: "Just bought this - amazing for gaming!",
+        date: new Date()
+      }
+    }
+  }
+)
+
+print("ביקורות אחרי ההוספה:")
+db.components.find(
+  { name: "AMD Ryzen 7 7800X3D" },
+  { name: 1, "reviews.user": 1, "reviews.rating": 1, _id: 0 }
+).pretty()
+
+// --- ד) $addToSet - הוספת תג (רק אם לא קיים) ---
+print("\nד) הוספת תג עם $addToSet (ללא כפילויות):")
+print("ניסיון להוסיף תג 'Gaming' ל-RTX 4090 (כבר קיים):")
+db.components.updateOne(
+  { name: "NVIDIA GeForce RTX 4090" },
+  { $addToSet: { tags: "Gaming" } }
+)
+// לא יתווסף כי כבר קיים
+
+print("הוספת תג 'Best Seller' (חדש):")
+db.components.updateOne(
+  { name: "NVIDIA GeForce RTX 4090" },
+  { $addToSet: { tags: "Best Seller" } }
+)
+
+print("תגים אחרי $addToSet:")
+db.components.find({ name: "NVIDIA GeForce RTX 4090" }, { name: 1, tags: 1, _id: 0 }).pretty()
+
+// --- ה) $pull - הסרת ביקורת לפי משתמש ---
+print("\nה) הסרת ביקורת עם $pull:")
+print("הסרת הביקורת של newreviewer:")
+db.components.updateOne(
+  { name: "AMD Ryzen 7 7800X3D" },
+  { $pull: { reviews: { user: "newreviewer" } } }
+)
+
+print("ביקורות אחרי ההסרה:")
+db.components.find(
+  { name: "AMD Ryzen 7 7800X3D" },
+  { name: 1, "reviews.user": 1, _id: 0 }
+).pretty()
+
+// --- ו) $pop - הסרת איבר ראשון/אחרון ממערך ---
+print("\nו) הסרת ביקורת אחרונה עם $pop:")
+print("ביקורות לפני:")
+db.components.find(
+  { name: "Samsung 990 Pro 2TB" },
+  { name: 1, "reviews.user": 1, _id: 0 }
+).pretty()
+
+db.components.updateOne(
+  { name: "Samsung 990 Pro 2TB" },
+  { $pop: { reviews: 1 } }  // 1 = אחרון, -1 = ראשון
+)
+
+print("ביקורות אחרי $pop:")
+db.components.find(
+  { name: "Samsung 990 Pro 2TB" },
+  { name: 1, "reviews.user": 1, _id: 0 }
+).pretty()
+
+// --- ז) $unset - הסרת שדה ---
+print("\nז) הסרת שדה עם $unset:")
+db.components.updateOne(
+  { name: "Intel Core i5-14600K" },
+  { $unset: { is_featured: "" } }
+)
+print("הוסר השדה is_featured")
+
+// --- ח) updateMany - עדכון מרובה ---
+print("\nח) הוספת שדה 'in_stock' לכל הרכיבים:")
+db.components.updateMany(
+  {},
+  { $set: { in_stock: true } }
+)
+print("נוסף שדה in_stock לכל", db.components.countDocuments(), "רכיבים")
+
+// --- ט) מחיקה מותנית - מפרטים שלא עודכנו בשנה האחרונה ---
+print("\nט) מחיקת מפרטים שלא עודכנו בשנה האחרונה:")
+var oneYearAgo = new Date()
+oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+print("מפרטים שלא עודכנו מאז " + oneYearAgo.toISOString().split('T')[0] + ":")
+db.builds.find(
+  { last_updated: { $lt: oneYearAgo } },
+  { build_name: 1, last_updated: 1, _id: 0 }
+).pretty()
+
+var deleteResult = db.builds.deleteMany({ last_updated: { $lt: oneYearAgo } })
+print("נמחקו " + deleteResult.deletedCount + " מפרטים ישנים")
+
+// --- י) שכפול אוסף - גיבוי builds ---
+print("\nי) שכפול אוסף builds לגיבוי:")
+
+// מחיקת גיבוי ישן אם קיים
+db.builds_backup.drop()
+
+// יצירת גיבוי עם aggregate + $out
+db.builds.aggregate([
+  { $match: {} },
+  { $out: "builds_backup" }
+])
+
+print("נוצר אוסף גיבוי: builds_backup")
+print("מסמכים בגיבוי:", db.builds_backup.countDocuments())
+
+// הצגת הגיבוי
+db.builds_backup.find({}, { build_name: 1, creator_name: 1, _id: 0 }).pretty()
+
+// --- יא) שכפול חלקי - רק Gaming builds ---
+print("\nיא) שכפול חלקי - רק מפרטי Gaming:")
+db.gaming_builds.drop()
+
+db.builds.aggregate([
+  { $match: { usage_type: "Gaming" } },
+  { $out: "gaming_builds" }
+])
+
+print("נוצר אוסף gaming_builds עם", db.gaming_builds.countDocuments(), "מסמכים")
+
+// --- יב) rename - שינוי שם אוסף ---
+print("\nיב) שינוי שם אוסף:")
+// נעשה rename לגיבוי ואז נחזיר
+db.gaming_builds.renameCollection("gaming_builds_archive")
+print("gaming_builds הפך ל-gaming_builds_archive")
+print("אוספים קיימים:", db.getCollectionNames())
+
+// --- יג) drop - מחיקת אוסף ---
+print("\niג) מחיקת אוסף:")
+db.gaming_builds_archive.drop()
+print("gaming_builds_archive נמחק")
+
+// --- יד) פונקציה לעדכון מחיר לפי אחוז ---
+function updatePriceByPercent(category, percentChange) {
+  var multiplier = 1 + (percentChange / 100)
+  
+  db.components.find({ category: category }).forEach(function(doc) {
+    var newPrice = Math.round(doc.price * multiplier)
+    db.components.updateOne(
+      { _id: doc._id },
+      { $set: { price: newPrice } }
+    )
+  })
+  
+  print("עודכנו מחירי " + category + " ב-" + percentChange + "%")
+}
+
+print("\nיד) פונקציה לעדכון מחירים באחוזים:")
+print("מחירי RAM לפני:")
+db.components.find({ category: "RAM" }, { name: 1, price: 1, _id: 0 }).pretty()
+
+updatePriceByPercent("RAM", 10)  // העלאה ב-10%
+
+print("מחירי RAM אחרי העלאה ב-10%:")
+db.components.find({ category: "RAM" }, { name: 1, price: 1, _id: 0 }).pretty()
+
+updatePriceByPercent("RAM", -10)  // החזרה
+print("הוחזרו מחירי RAM")
+
+print("\n=== סיום סעיף 5 ===")
+
+// ============================================================
+// סעיף 6: אגרגציה (Aggregation)
+// ============================================================
+
+print("\n===========================================")
+print("=== סעיף 6: אגרגציה (Aggregation) ===")
+print("===========================================\n")
+
+// --- א) Pipeline בסיסי - מחיר ממוצע לפי יצרן ---
+print("א) מחיר ממוצע לפי יצרן:")
+db.components.aggregate([
+  { $group: {
+    _id: "$manufacturer",
+    avgPrice: { $avg: "$price" },
+    count: { $sum: 1 }
+  }},
+  { $sort: { avgPrice: -1 } }
+]).pretty()
+
+// --- ב) Pipeline עם $match - סינון ראשוני ---
+print("\nב) מחיר ממוצע לפי יצרן (רק רכיבים מעל $200):")
+db.components.aggregate([
+  { $match: { price: { $gt: 200 } } },
+  { $group: {
+    _id: "$manufacturer",
+    avgPrice: { $avg: "$price" },
+    count: { $sum: 1 }
+  }},
+  { $sort: { avgPrice: -1 } }
+]).pretty()
+
+// --- ג) Pipeline עם $project ---
+print("\nג) בחירת שדות עם $project:")
+db.components.aggregate([
+  { $match: { category: "CPU" } },
+  { $project: {
+    name: 1,
+    manufacturer: 1,
+    price: 1,
+    cores: "$specs.cores",
+    threads: "$specs.threads",
+    _id: 0
+  }},
+  { $sort: { cores: -1 } }
+]).pretty()
+
+// --- ד) Pipeline עם $unwind - פריסת מערך ---
+print("\nד) פריסת מערך reviews עם $unwind:")
+db.components.aggregate([
+  { $match: { category: "CPU" } },
+  { $unwind: "$reviews" },
+  { $project: {
+    name: 1,
+    reviewer: "$reviews.user",
+    rating: "$reviews.rating",
+    _id: 0
+  }}
+]).pretty()
+
+// --- ה) חישוב דירוג ממוצע לכל רכיב ---
+print("\nה) דירוג ממוצע לכל רכיב:")
+db.components.aggregate([
+  { $unwind: "$reviews" },
+  { $group: {
+    _id: "$name",
+    avgRating: { $avg: "$reviews.rating" },
+    reviewCount: { $sum: 1 }
+  }},
+  { $sort: { avgRating: -1, reviewCount: -1 } },
+  { $limit: 5 }
+]).pretty()
+
+// --- ו) Pipeline עם $lookup - Join בין builds ל-components ---
+print("\nו) חישוב עלות אמיתית של מפרט עם $lookup:")
+db.builds.aggregate([
+  { $lookup: {
+    from: "components",
+    localField: "parts",
+    foreignField: "_id",
+    as: "part_details"
+  }},
+  { $project: {
+    build_name: 1,
+    creator_name: 1,
+    total_budget: 1,
+    actual_price: { $sum: "$part_details.price" },
+    parts_count: { $size: "$part_details" },
+    _id: 0
+  }},
+  { $sort: { actual_price: -1 } }
+]).pretty()
+
+// --- ז) Pipeline מורכב - רכיבים עם מעל 2 ביקורות ---
+print("\nז) מחיר ממוצע לפי יצרן (רק רכיבים עם 2+ ביקורות):")
+db.components.aggregate([
+  // שלב 1: סינון - רק רכיבים עם מעל 2 ביקורות
+  { $match: { "reviews.2": { $exists: true } } },
+  
+  // שלב 2: בחירת שדות
+  { $project: { 
+    name: 1, 
+    manufacturer: 1, 
+    price: 1, 
+    reviewCount: { $size: "$reviews" } 
+  }},
+  
+  // שלב 3: קיבוץ לפי יצרן
+  { $group: { 
+    _id: "$manufacturer", 
+    avgPrice: { $avg: "$price" },
+    totalProducts: { $sum: 1 },
+    products: { $push: "$name" }
+  }},
+  
+  // שלב 4: מיון מהיקר לזול
+  { $sort: { avgPrice: -1 } }
+]).pretty()
+
+// --- ח) Pipeline עם $out - פלט לאוסף חדש ---
+print("\nח) יצירת אוסף סטטיסטיקות יצרנים עם $out:")
+db.manufacturer_stats.drop()
+
+db.components.aggregate([
+  { $group: {
+    _id: "$manufacturer",
+    avgPrice: { $avg: "$price" },
+    maxPrice: { $max: "$price" },
+    minPrice: { $min: "$price" },
+    productCount: { $sum: 1 }
+  }},
+  { $sort: { avgPrice: -1 } },
+  { $out: "manufacturer_stats" }
+])
+
+print("נוצר אוסף manufacturer_stats:")
+db.manufacturer_stats.find().pretty()
+
+// --- ט) $lookup כפול - users -> builds -> components ---
+print("\nט) שאילתה מורכבת - משתמשים עם ה-builds שלהם והרכיבים:")
+db.users.aggregate([
+  // Join עם builds
+  { $lookup: {
+    from: "builds",
+    localField: "saved_builds",
+    foreignField: "_id",
+    as: "build_details"
+  }},
+  // פריסת ה-builds
+  { $unwind: { path: "$build_details", preserveNullAndEmptyArrays: true } },
+  // בחירת שדות
+  { $project: {
+    username: 1,
+    build_name: "$build_details.build_name",
+    budget: "$build_details.total_budget",
+    _id: 0
+  }},
+  { $limit: 10 }
+]).pretty()
+
+// --- י) סטטיסטיקות לפי קטגוריה ---
+print("\nי) סטטיסטיקות לפי קטגוריה:")
+db.components.aggregate([
+  { $group: {
+    _id: "$category",
+    avgPrice: { $avg: "$price" },
+    count: { $sum: 1 },
+    totalValue: { $sum: "$price" }
+  }},
+  { $project: {
+    category: "$_id",
+    avgPrice: { $round: ["$avgPrice", 2] },
+    count: 1,
+    totalValue: 1,
+    _id: 0
+  }},
+  { $sort: { avgPrice: -1 } }
+]).pretty()
+
+print("\n=== סיום סעיף 6 ===")
+
+// ============================================================
+// סעיף 7: MapReduce
+// ============================================================
+
+print("\n===========================================")
+print("=== סעיף 7: MapReduce ===")
+print("===========================================\n")
+
+// --- א) MapReduce בסיסי - ספירת רכיבים לפי קטגוריה ---
+print("א) ספירת רכיבים לפי קטגוריה:")
+
+var mapFunction = function() {
+  emit(this.category, 1);
+};
+
+var reduceFunction = function(key, values) {
+  return Array.sum(values);
+};
+
+db.category_counts.drop()
+
+db.components.mapReduce(
+  mapFunction,
+  reduceFunction,
+  { out: "category_counts" }
+)
+
+print("תוצאות MapReduce:")
+db.category_counts.find().sort({ value: -1 }).pretty()
+
+// --- ב) MapReduce עם query - סינון לפני המיפוי ---
+print("\nב) ספירת רכיבים יקרים (מעל $300) לפי קטגוריה:")
+
+db.expensive_category_counts.drop()
+
+db.components.mapReduce(
+  mapFunction,
+  reduceFunction,
+  { 
+    out: "expensive_category_counts",
+    query: { price: { $gt: 300 } }
+  }
+)
+
+print("רכיבים יקרים לפי קטגוריה:")
+db.expensive_category_counts.find().sort({ value: -1 }).pretty()
+
+// --- ג) MapReduce עם finalize ---
+print("\nג) MapReduce עם פונקציית finalize:")
+
+var mapPrices = function() {
+  emit(this.manufacturer, { sum: this.price, count: 1 });
+};
+
+var reducePrices = function(key, values) {
+  var result = { sum: 0, count: 0 };
+  values.forEach(function(value) {
+    result.sum += value.sum;
+    result.count += value.count;
+  });
+  return result;
+};
+
+var finalizeAvg = function(key, reducedValue) {
+  return {
+    manufacturer: key,
+    avgPrice: Math.round(reducedValue.sum / reducedValue.count),
+    productCount: reducedValue.count,
+    status: reducedValue.count > 2 ? "Active Manufacturer" : "Limited Products"
+  };
+};
+
+db.manufacturer_avg_mr.drop()
+
+db.components.mapReduce(
+  mapPrices,
+  reducePrices,
+  { 
+    out: "manufacturer_avg_mr",
+    finalize: finalizeAvg
+  }
+)
+
+print("סטטיסטיקות יצרנים עם finalize:")
+db.manufacturer_avg_mr.find().pretty()
+
+// --- ד) MapReduce - ספירת ביקורות לפי דירוג ---
+print("\nד) ספירת ביקורות לפי דירוג:")
+
+var mapReviewRatings = function() {
+  if (this.reviews) {
+    this.reviews.forEach(function(review) {
+      emit(review.rating, 1);
+    });
+  }
+};
+
+var reduceCount = function(key, values) {
+  return Array.sum(values);
+};
+
+var finalizeRating = function(key, reducedValue) {
+  var stars = "";
+  for (var i = 0; i < key; i++) { stars += "★"; }
+  return {
+    rating: key,
+    stars: stars,
+    count: reducedValue
+  };
+};
+
+db.rating_distribution.drop()
+
+db.components.mapReduce(
+  mapReviewRatings,
+  reduceCount,
+  { 
+    out: "rating_distribution",
+    finalize: finalizeRating
+  }
+)
+
+print("התפלגות דירוגים:")
+db.rating_distribution.find().sort({ _id: -1 }).pretty()
+
+// --- ה) MapReduce - סכום מחירים לפי קטגוריה ---
+print("\nה) סכום מחירים לפי קטגוריה:")
+
+var mapTotalPrice = function() {
+  emit(this.category, this.price);
+};
+
+var reduceSum = function(key, values) {
+  return Array.sum(values);
+};
+
+var finalizeTotal = function(key, reducedValue) {
+  return {
+    category: key,
+    totalValue: reducedValue,
+    formatted: "$" + reducedValue.toLocaleString()
+  };
+};
+
+db.category_totals.drop()
+
+db.components.mapReduce(
+  mapTotalPrice,
+  reduceSum,
+  { 
+    out: "category_totals",
+    finalize: finalizeTotal
+  }
+)
+
+print("סכום כולל לפי קטגוריה:")
+db.category_totals.find().sort({ "value.totalValue": -1 }).pretty()
+
+print("\n=== סיום סעיף 7 ===")
+
+// ============================================================
+// סעיף 8: בדיקות אימות (Verification Tests)
+// ============================================================
+
+print("\n\n============================================================")
+print("============================================================")
+print("=== בדיקות אימות - וידוא תקינות הפרויקט ===")
+print("============================================================")
+print("============================================================\n")
+
+// --- בדיקה 1: קיום אוספים ---
+print("בדיקה 1: אוספים קיימים")
+var collections = db.getCollectionNames()
+print("  אוספים במסד הנתונים:", collections.join(", "))
+print("  ✓ components:", collections.includes("components") ? "קיים" : "חסר!")
+print("  ✓ builds:", collections.includes("builds") ? "קיים" : "חסר!")
+print("  ✓ users:", collections.includes("users") ? "קיים" : "חסר!")
+
+// --- בדיקה 2: כמות מסמכים ---
+print("\nבדיקה 2: כמות מסמכים")
+var compCount = db.components.countDocuments()
+var buildCount = db.builds.countDocuments()
+var userCount = db.users.countDocuments()
+print("  רכיבים (components):", compCount, compCount >= 15 ? "✓" : "✗ (צריך לפחות 15)")
+print("  מפרטים (builds):", buildCount, buildCount >= 5 ? "✓" : "✗ (צריך לפחות 5)")
+print("  משתמשים (users):", userCount, userCount >= 5 ? "✓" : "✗ (צריך לפחות 5)")
+
+// --- בדיקה 3: מבנה פולימורפי ---
+print("\nבדיקה 3: מבנה פולימורפי (specs שונה לפי קטגוריה)")
+var cpu = db.components.findOne({ category: "CPU" })
+var gpu = db.components.findOne({ category: "GPU" })
+var ram = db.components.findOne({ category: "RAM" })
+var storage = db.components.findOne({ category: "Storage" })
+print("  CPU יש 'cores':", cpu && cpu.specs.cores !== undefined ? "✓" : "✗")
+print("  GPU יש 'vram':", gpu && gpu.specs.vram !== undefined ? "✓" : "✗")
+print("  RAM יש 'capacity_gb':", ram && ram.specs.capacity_gb !== undefined ? "✓" : "✗")
+print("  Storage יש 'read_speed':", storage && storage.specs.read_speed !== undefined ? "✓" : "✗")
+
+// --- בדיקה 4: Embedded Data ---
+print("\nבדיקה 4: Embedded Data (ביקורות בתוך רכיבים)")
+var hasReviews = db.components.findOne({ "reviews.0": { $exists: true } })
+var hasPriceHistory = db.components.findOne({ "price_history.0": { $exists: true } })
+print("  קיימים reviews:", hasReviews !== null ? "✓" : "✗")
+print("  קיים price_history:", hasPriceHistory !== null ? "✓" : "✗")
+
+// --- בדיקה 5: Referenced Data ---
+print("\nבדיקה 5: Referenced Data (parts ב-builds מקשר ל-components)")
+var build = db.builds.findOne()
+if (build && build.parts && build.parts.length > 0) {
+  var partId = build.parts[0]
+  var linkedComponent = db.components.findOne({ _id: partId })
+  print("  parts מכיל ObjectIds:", "✓")
+  print("  הקישור עובד:", linkedComponent !== null ? "✓ (" + linkedComponent.name + ")" : "✗")
+} else {
+  print("  parts:", "✗ - אין parts ב-builds")
+}
+
+// --- בדיקה 6: אוספים שנוצרו מ-Aggregation ---
+print("\nבדיקה 6: אוספים שנוצרו מ-Aggregation ($out)")
+print("  manufacturer_stats:", collections.includes("manufacturer_stats") ? "✓" : "✗")
+print("  builds_backup:", collections.includes("builds_backup") ? "✓" : "✗")
+
+// --- בדיקה 7: אוספים שנוצרו מ-MapReduce ---
+print("\nבדיקה 7: אוספים שנוצרו מ-MapReduce")
+print("  category_counts:", collections.includes("category_counts") ? "✓" : "✗")
+print("  manufacturer_avg_mr:", collections.includes("manufacturer_avg_mr") ? "✓" : "✗")
+print("  rating_distribution:", collections.includes("rating_distribution") ? "✓" : "✗")
+
+// --- בדיקה 8: מערכים שונים ---
+print("\nבדיקה 8: סוגי מערכים שונים")
+print("  reviews[] (ביקורות):", hasReviews !== null ? "✓" : "✗")
+print("  tags[] (תגים):", db.components.findOne({ "tags.0": { $exists: true } }) !== null ? "✓" : "✗")
+print("  parts[] (רכיבים):", db.builds.findOne({ "parts.0": { $exists: true } }) !== null ? "✓" : "✗")
+print("  saved_builds[] (מפרטים שמורים):", db.users.findOne({ "saved_builds.0": { $exists: true } }) !== null ? "✓" : "✗")
+print("  price_history[] (היסטוריית מחירים):", hasPriceHistory !== null ? "✓" : "✗")
+
+// --- סיכום ---
+print("\n============================================================")
+print("=== סיכום סופי ===")
+print("============================================================")
+print("סה\"כ שורות קוד בקובץ: ~1400+")
+print("סה\"כ רכיבים:", db.components.countDocuments())
+print("סה\"כ מפרטים:", db.builds.countDocuments())
+print("סה\"כ משתמשים:", db.users.countDocuments())
+print("סה\"כ אוספים:", db.getCollectionNames().length)
+print("============================================================")
+
+print("\n")
+print("   ____                            _       _   _                 _ ")
+print("  / ___|___  _ __   __ _ _ __ __ _| |_ ___| | | | __ _ _ __   __| |")
+print(" | |   / _ \\| '_ \\ / _` | '__/ _` | __/ __| | | |/ _` | '_ \\ / _` |")
+print(" | |__| (_) | | | | (_| | | | (_| | |_\\__ \\_|_| | (_| | | | | (_| |")
+print("  \\____\\___/|_| |_|\\__, |_|  \\__,_|\\__|___(_) (_)\\__,_|_| |_|\\__,_|")
+print("                   |___/                                           ")
+print("\n")
+print("הפרויקט הושלם בהצלחה!")
+print("============================================================")
