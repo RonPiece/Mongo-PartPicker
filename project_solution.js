@@ -569,9 +569,10 @@ db.builds.insertMany([
 print("נוספו 5 מפרטים (Builds) עם compatibility_verified")
 
 // ============================================================
-// הכנסת נתונים - אוסף users
+// הכנסת נתונים - אוסף users עם מערכים מקוננים (Nested Arrays)
+// מבנה: User -> orders[] -> items[] (היררכיה תלת-שכבתית)
 // ============================================================
-print("\n--- יצירת משתמשים (Users) ---")
+print("\n--- יצירת משתמשים (Users) עם היסטוריית הזמנות מקוננת ---")
 
 var build_ultimate = db.builds.findOne({ build_name: "Ultimate Gaming Rig 2024" })._id
 var build_amd = db.builds.findOne({ build_name: "AMD Workstation Pro" })._id
@@ -585,39 +586,114 @@ db.users.insertMany([
         email: "gamer2024@email.com",
         registered_date: ISODate("2024-01-15"),
         saved_builds: [build_ultimate, build_sweetspot],
-        preferences: { preferred_manufacturer: "NVIDIA", budget_range: { min: 2000, max: 5000 }, usage: "Gaming" }
+        preferences: { preferred_manufacturer: "NVIDIA", budget_range: { min: 2000, max: 5000 }, usage: "Gaming" },
+        // מערך מקונן: orders -> items (Nested Arrays!)
+        orders: [
+            {
+                order_id: 1001,
+                date: ISODate("2024-02-15"),
+                status: "completed",
+                items: [
+                    { part_id: gpu_4090, type: "GPU", name: "RTX 4090", price: 1599, quantity: 1 },
+                    { part_id: cpu_i9, type: "CPU", name: "i9-14900K", price: 589, quantity: 1 },
+                    { part_id: ram_gskill, type: "RAM", name: "Trident Z5", price: 189, quantity: 2 }
+                ]
+            },
+            {
+                order_id: 1002,
+                date: ISODate("2024-06-20"),
+                status: "completed",
+                items: [
+                    { part_id: ssd_samsung, type: "Storage", name: "990 Pro 2TB", price: 179, quantity: 1 }
+                ]
+            }
+        ]
     },
     {
         username: "videoeditor",
         email: "video.editor@email.com",
         registered_date: ISODate("2024-02-01"),
         saved_builds: [build_amd],
-        preferences: { preferred_manufacturer: "AMD", budget_range: { min: 3000, max: 6000 }, usage: "Workstation" }
+        preferences: { preferred_manufacturer: "AMD", budget_range: { min: 3000, max: 6000 }, usage: "Workstation" },
+        orders: [
+            {
+                order_id: 2001,
+                date: ISODate("2024-03-10"),
+                status: "completed",
+                items: [
+                    { part_id: gpu_7900, type: "GPU", name: "RX 7900 XTX", price: 899, quantity: 1 },
+                    { part_id: cpu_ryzen9, type: "CPU", name: "Ryzen 9 7950X", price: 549, quantity: 1 },
+                    { part_id: mb_msi, type: "Motherboard", name: "B650 Tomahawk", price: 219, quantity: 1 }
+                ]
+            }
+        ]
     },
     {
         username: "budgetgamer",
         email: "budget.gamer@email.com",
         registered_date: ISODate("2024-03-10"),
         saved_builds: [build_sweetspot, build_budget],
-        preferences: { preferred_manufacturer: "AMD", budget_range: { min: 1000, max: 2500 }, usage: "Gaming" }
+        preferences: { preferred_manufacturer: "AMD", budget_range: { min: 1000, max: 2500 }, usage: "Gaming" },
+        orders: [
+            {
+                order_id: 3001,
+                date: ISODate("2024-04-05"),
+                status: "completed",
+                items: [
+                    { part_id: gpu_4070, type: "GPU", name: "RTX 4070 Ti Super", price: 799, quantity: 1 },
+                    { part_id: cpu_ryzen7, type: "CPU", name: "Ryzen 7 7800X3D", price: 449, quantity: 1 }
+                ]
+            },
+            {
+                order_id: 3002,
+                date: ISODate("2024-07-15"),
+                status: "completed",
+                items: [
+                    { part_id: ram_corsair, type: "RAM", name: "Vengeance DDR5", price: 129, quantity: 2 }
+                ]
+            }
+        ]
     },
     {
         username: "streamer1",
         email: "streamer@email.com",
         registered_date: ISODate("2024-04-05"),
         saved_builds: [build_highend],
-        preferences: { preferred_manufacturer: "Intel", budget_range: { min: 2000, max: 4000 }, usage: "Streaming" }
+        preferences: { preferred_manufacturer: "Intel", budget_range: { min: 2000, max: 4000 }, usage: "Streaming" },
+        orders: [
+            {
+                order_id: 4001,
+                date: ISODate("2024-05-20"),
+                status: "completed",
+                items: [
+                    { part_id: gpu_4070, type: "GPU", name: "RTX 4070 Ti Super", price: 799, quantity: 1 },
+                    { part_id: cpu_i7, type: "CPU", name: "i7-14700K", price: 409, quantity: 1 },
+                    { part_id: mb_asus, type: "Motherboard", name: "ROG Maximus Z790", price: 629, quantity: 1 }
+                ]
+            }
+        ]
     },
     {
         username: "firsttimebuilder",
         email: "newbuilder@email.com",
         registered_date: ISODate("2024-05-20"),
         saved_builds: [build_budget],
-        preferences: { preferred_manufacturer: "Intel", budget_range: { min: 500, max: 1500 }, usage: "Budget" }
+        preferences: { preferred_manufacturer: "Intel", budget_range: { min: 500, max: 1500 }, usage: "Budget" },
+        orders: [
+            {
+                order_id: 5001,
+                date: ISODate("2024-08-01"),
+                status: "completed",
+                items: [
+                    { part_id: gpu_4060, type: "GPU", name: "RTX 4060", price: 299, quantity: 1 },
+                    { part_id: cpu_i5, type: "CPU", name: "i5-14600K", price: 319, quantity: 1 }
+                ]
+            }
+        ]
     }
 ])
 
-print("נוספו 5 משתמשים (Users)")
+print("נוספו 5 משתמשים עם היסטוריית הזמנות מקוננת (orders[] -> items[])")
 
 // ============================================================
 // סיכום הקמת הנתונים
@@ -672,6 +748,63 @@ db.components.find(
     { name: 1, type: 1, "specs.score": 1, _id: 0 }
 ).sort({ "specs.score": -1 }).pretty()
 
+// --- סעיף 3: פונקציות JSON עוטפות ---
+print("\n--- סעיף 3: פונקציות עוטפות ---")
+
+// פונקציה: חיפוש רכיבים לפי טווח מחירים
+function findByPriceRange(minPrice, maxPrice) {
+    return db.components.find(
+        { price: { $gte: minPrice, $lte: maxPrice } },
+        { name: 1, price: 1, type: 1, _id: 0 }
+    ).toArray();
+}
+
+print("\nו) פונקציה findByPriceRange($200-$500):")
+var results = findByPriceRange(200, 500);
+results.forEach(function (item) {
+    print("  " + item.name + " (" + item.type + ") - $" + item.price);
+});
+
+// פונקציה: חישוב ממוצע דירוגים
+function getAverageRating(componentName) {
+    var comp = db.components.findOne({ name: componentName });
+    if (!comp || !comp.reviews || comp.reviews.length === 0) return 0;
+    var sum = 0;
+    comp.reviews.forEach(function (r) { sum += r.rating; });
+    return (sum / comp.reviews.length).toFixed(1);
+}
+
+print("\nז) פונקציה getAverageRating:")
+print("  Intel Core i9-14900K: " + getAverageRating("Intel Core i9-14900K"));
+print("  RTX 4090: " + getAverageRating("NVIDIA GeForce RTX 4090"));
+
+// --- המשך שליפות מורכבות ---
+print("\nח) שימוש ב-count:")
+print("  מספר CPUs:", db.components.countDocuments({ type: "CPU" }))
+print("  מספר GPUs:", db.components.countDocuments({ type: "GPU" }))
+
+print("\nט) שימוש ב-forEach:")
+db.components.find({ type: "Motherboard" }, { name: 1, _id: 0 }).forEach(function (doc) {
+    print("  - " + doc.name);
+});
+
+print("\nי) שימוש ב-Regex - שמות עם RTX:")
+db.components.find({ name: /RTX/ }, { name: 1, price: 1, _id: 0 }).pretty()
+
+print("\niא) שימוש ב-$or ו-$and:")
+db.components.find({
+    $and: [
+        { $or: [{ manufacturer: "Intel" }, { manufacturer: "AMD" }] },
+        { price: { $lt: 500 } }
+    ]
+}, { name: 1, manufacturer: 1, price: 1, _id: 0 }).pretty()
+
+print("\nיב) שימוש ב-$exists - רכיבים עם requirements:")
+db.components.find(
+    { requirements: { $exists: true } },
+    { name: 1, type: 1, _id: 0 }
+).pretty()
+
 // ============================================================
 // סעיף 5: עדכונים ומחיקות (Updates & Deletes)
 // ============================================================
@@ -707,6 +840,43 @@ print("הוסרה הביקורת")
 print("\nד) הוספת in_stock לכל הרכיבים:")
 db.components.updateMany({}, { $set: { in_stock: true } })
 print("נוסף שדה in_stock לכל", db.components.countDocuments(), "רכיבים")
+
+// $inc - העלאת מחיר
+print("\nה) $inc - העלאת מחיר ב-$10 לכל מוצרי NVIDIA:")
+db.components.updateMany({ manufacturer: "NVIDIA" }, { $inc: { price: 10 } })
+print("עודכנו מחירי NVIDIA")
+db.components.updateMany({ manufacturer: "NVIDIA" }, { $inc: { price: -10 } }) // החזרה
+
+// $addToSet - הוספת תג ללא כפילויות
+print("\nו) $addToSet - הוספת תג:")
+db.components.updateOne({ name: "NVIDIA GeForce RTX 4090" }, { $addToSet: { tags: "Best Seller" } })
+print("נוסף תג Best Seller")
+
+// $pop - הסרת איבר אחרון ממערך
+print("\nז) $pop - הסרה מ-price_history:")
+db.components.updateOne({ name: "Samsung 990 Pro 2TB" }, { $pop: { price_history: 1 } })
+print("הוסר איבר אחרון מהיסטוריית מחירים")
+
+// $unset - הסרת שדה
+print("\nח) $unset - הסרת שדה:")
+db.components.updateOne({ name: "Intel Core i5-14600K" }, { $unset: { is_featured: "" } })
+print("הוסר is_featured")
+
+// --- שכפול אוסף ---
+print("\nט) שכפול אוסף builds לגיבוי:")
+db.builds_backup.drop()
+db.builds.aggregate([{ $match: {} }, { $out: "builds_backup" }])
+print("נוצר builds_backup עם", db.builds_backup.countDocuments(), "מסמכים")
+
+// שכפול חלקי
+print("\nי) שכפול חלקי - רק Gaming builds:")
+db.gaming_builds.drop()
+db.builds.aggregate([{ $match: { usage_type: "Gaming" } }, { $out: "gaming_builds" }])
+print("נוצר gaming_builds עם", db.gaming_builds.countDocuments(), "מסמכים")
+
+// מחיקת האוסף
+db.gaming_builds.drop()
+print("gaming_builds נמחק")
 
 print("\n=== סיום סעיף 5 ===")
 
@@ -895,6 +1065,135 @@ db.builds_with_scores.mapReduce(
 
 print("\nתוצאות King of the Hill - הטוב ביותר לכל טווח תקציב:")
 db.best_builds_per_tier.find().sort({ _id: 1 }).pretty()
+
+// --- MapReduce נוסף ב': ספירת רכיבים לפי יצרן עם query ---
+print("\nMapReduce ב': ספירת רכיבים לפי יצרן (רק מעל $200):")
+
+var mapManufacturer = function () {
+    emit(this.manufacturer, { count: 1, totalPrice: this.price });
+};
+
+var reduceManufacturer = function (key, values) {
+    var result = { count: 0, totalPrice: 0 };
+    values.forEach(function (v) {
+        result.count += v.count;
+        result.totalPrice += v.totalPrice;
+    });
+    return result;
+};
+
+var finalizeManufacturer = function (key, reducedValue) {
+    return {
+        manufacturer: key,
+        productCount: reducedValue.count,
+        avgPrice: Math.round(reducedValue.totalPrice / reducedValue.count)
+    };
+};
+
+db.manufacturer_stats_mr.drop()
+db.components.mapReduce(
+    mapManufacturer,
+    reduceManufacturer,
+    { out: "manufacturer_stats_mr", query: { price: { $gt: 200 } }, finalize: finalizeManufacturer }
+)
+print("תוצאות:")
+db.manufacturer_stats_mr.find().pretty()
+
+// --- MapReduce נוסף ג': התפלגות דירוגים ---
+print("\nMapReduce ג': התפלגות דירוגים:")
+
+var mapRatings = function () {
+    if (this.reviews) {
+        this.reviews.forEach(function (r) { emit(r.rating, 1); });
+    }
+};
+
+var reduceRatings = function (key, values) { return Array.sum(values); };
+
+var finalizeRatings = function (key, reducedValue) {
+    var stars = "";
+    for (var i = 0; i < key; i++) stars += "★";
+    return { rating: key, stars: stars, count: reducedValue };
+};
+
+db.rating_distribution.drop()
+db.components.mapReduce(mapRatings, reduceRatings, { out: "rating_distribution", finalize: finalizeRatings })
+print("תוצאות:")
+db.rating_distribution.find().sort({ _id: -1 }).pretty()
+
+// --- MapReduce נוסף ד': לולאות מקוננות על users (כמו דוגמאות המרצה!) ---
+// מבנה: User -> orders[] -> items[] (Nested Loops)
+print("\n===========================================")
+print("MapReduce ד': הוצאות על GPU לכל משתמש (Nested Loops)")
+print("===========================================")
+
+var mapUserGPUSpending = function () {
+    // לולאה חיצונית: על הזמנות
+    var totalGPUSpending = 0;
+    var gpuCount = 0;
+
+    if (this.orders) {
+        for (var i = 0; i < this.orders.length; i++) {
+            var order = this.orders[i];
+            // לולאה פנימית: על פריטים בתוך ההזמנה (NESTED LOOP!)
+            if (order.items) {
+                for (var j = 0; j < order.items.length; j++) {
+                    var item = order.items[j];
+                    // בדיקה אם זה GPU
+                    if (item.type === "GPU") {
+                        totalGPUSpending += item.price * item.quantity;
+                        gpuCount += item.quantity;
+                    }
+                }
+            }
+        }
+    }
+
+    emit(this.username, {
+        totalGPU: totalGPUSpending,
+        gpuCount: gpuCount,
+        orderCount: this.orders ? this.orders.length : 0
+    });
+};
+
+var reduceUserGPU = function (key, values) {
+    var result = { totalGPU: 0, gpuCount: 0, orderCount: 0 };
+    values.forEach(function (v) {
+        result.totalGPU += v.totalGPU;
+        result.gpuCount += v.gpuCount;
+        result.orderCount += v.orderCount;
+    });
+    return result;
+};
+
+var finalizeUserGPU = function (key, reducedValue) {
+    var status = "";
+    if (reducedValue.totalGPU >= 1000) {
+        status = "🔥 GPU Enthusiast!";
+    } else if (reducedValue.totalGPU > 0) {
+        status = "✅ GPU Owner";
+    } else {
+        status = "❌ No GPU Purchases";
+    }
+
+    return {
+        username: key,
+        gpu_spending: "$" + reducedValue.totalGPU,
+        gpus_purchased: reducedValue.gpuCount,
+        total_orders: reducedValue.orderCount,
+        status: status
+    };
+};
+
+db.user_gpu_spending.drop()
+db.users.mapReduce(
+    mapUserGPUSpending,
+    reduceUserGPU,
+    { out: "user_gpu_spending", finalize: finalizeUserGPU }
+)
+
+print("תוצאות הוצאות GPU לכל משתמש (חושב עם לולאות מקוננות):")
+db.user_gpu_spending.find().pretty()
 
 print("\n=== סיום סעיף 7 ===")
 
