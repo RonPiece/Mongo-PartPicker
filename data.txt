@@ -22,11 +22,24 @@ if (typeof cat !== "function") {
     }
 }
 
+function resolveMppPath(relPath) {
+    try {
+        if (typeof globalThis !== "undefined" && globalThis.__MPP_REPO_ROOT__) {
+            var root = globalThis.__MPP_REPO_ROOT__.toString().replace(/\\/g, "/").replace(/\/+$/, "");
+            return root + "/" + relPath;
+        }
+    } catch (e) {
+        // ignore
+    }
+    return relPath;
+}
+
 function loadJsonArray(path) {
-    var txt = cat(path);
+    var resolved = resolveMppPath(path);
+    var txt = cat(resolved);
     var arr = JSON.parse(txt);
     if (!arr || Object.prototype.toString.call(arr) !== "[object Array]") {
-        throw new Error("Expected JSON array in " + path);
+        throw new Error("Expected JSON array in " + resolved);
     }
     return arr;
 }

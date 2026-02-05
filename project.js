@@ -15,12 +15,35 @@
 
 db = db.getSiblingDB("MongoPartPicker");
 
+// If a previous run failed mid-seed, the guard may be set while the DB is empty.
+// Auto-recover by clearing the flag when collections are missing/empty.
+try {
+    if (globalThis.__MPP_SEEDED__ === true) {
+        var __mppCols = (typeof db.getCollectionNames === "function") ? db.getCollectionNames() : [];
+        var __mppHasComponents = __mppCols.indexOf("components") >= 0;
+        if (!__mppHasComponents) {
+            delete globalThis.__MPP_SEEDED__;
+        } else {
+            var __mppCount = 0;
+            try {
+                __mppCount = db.components.countDocuments({});
+            } catch (e) {
+                __mppCount = db.components.find({}).limit(1).toArray().length;
+            }
+            if (__mppCount === 0) delete globalThis.__MPP_SEEDED__;
+        }
+    }
+} catch (e) {
+    // ignore
+}
+
 // Seed guard:
 // - First load() seeds the DB.
 // - Subsequent load() calls only re-define functions (no drop/reseed).
 // To force a full re-seed in mongosh: `delete globalThis.__MPP_SEEDED__` then load() again.
 if (!globalThis.__MPP_SEEDED__) {
-    globalThis.__MPP_SEEDED__ = true;
+    globalThis.__MPP_SEEDED__ = "in-progress";
+    try {
 
 // Drop existing collections for a clean run
 db.components.drop()
@@ -36,18 +59,31 @@ db.createCollection("users")
 // ============================================================
 // Section 2 (continued): Load JSON data (see data.js) and transform -> insertMany
 // ============================================================
-// Make relative loads work even if project.js is loaded from a different cwd.
-// This is intentionally simple (no complex path-walking logic).
+// Load data.js without relying on cd(), which may not exist in some mongosh installs.
+// Prefer absolute path derived from USERPROFILE, with a relative fallback.
+var __mppRepo = null;
 try {
     if (typeof process !== "undefined" && process.env && process.env.USERPROFILE) {
-        var __mppRepo = process.env.USERPROFILE.replace(/\\/g, "/") + "/source/repos/MongopPcPartPicker";
-        cd(__mppRepo);
+        __mppRepo = process.env.USERPROFILE.replace(/\\/g, "/") + "/source/repos/MongopPcPartPicker";
+        globalThis.__MPP_REPO_ROOT__ = __mppRepo;
     }
 } catch (e) {
-    // If cd() fails, the caller should run: cd("C:/Users/user/source/repos/MongopPcPartPicker")
+    // ignore
 }
 
-load("./data.js");
+var __mppLoadedData = false;
+try {
+    if (__mppRepo) {
+        load(__mppRepo + "/data.js");
+        __mppLoadedData = true;
+    }
+} catch (e) {
+    __mppLoadedData = false;
+}
+
+if (!__mppLoadedData) {
+    load("./data.js");
+}
 
 function safeNumber(value, fallback) {
     if (value === null || value === undefined) return fallback;
@@ -979,6 +1015,12 @@ db.users.insertMany([
 
 })();
 
+        globalThis.__MPP_SEEDED__ = true;
+    } catch (e) {
+        delete globalThis.__MPP_SEEDED__;
+        throw e;
+    }
+
 }
 
 // ============================================================
@@ -1177,26 +1219,38 @@ function section5_updatesAndDeletes() {
 // - PSU wattage meets an estimated requirement
 // ============================================================
 
+// ============================================================
+// The Smart & Fast Auto-Builder (Cascading)
+// Fast because it limits candidates at each stage, but strict on:
+// - CPU socket == Motherboard socket
+// - RAM generation matches motherboard requirement (when known)
+// - GPU length fits Case
+// - PSU wattage is sufficient
+// - Total price <= budget
+// ============================================================
+
 var buildComputerByBudget = function (maxBudget) {
     db.recommended_combos.drop();
 
-    // Keep a literal string (avoid relying on $toString availability)
+    // Leave budget for the rest of the parts
+    var maxCpuPrice = maxBudget * 0.35;
     var budgetLabel = maxBudget.toString();
+    var buildNameLiteral = "AutoBuild for $" + budgetLabel;
 
     db.components.aggregate([
-        // 1) CPU
+        // 1) CPU (top candidates within CPU budget)
         {
             $match: {
                 type: "CPU",
-                price: { $type: "number" },
+                price: { $type: "number", $lte: maxCpuPrice },
                 "specs.score": { $type: "number" },
                 "requirements.socket_match": { $exists: true, $ne: null }
             }
         },
         { $sort: { "specs.score": -1, price: 1 } },
-        { $limit: 30 },
+        { $limit: 10 },
 
-        // 2) Motherboard - Socket compatibility
+        // 2) Motherboard (socket match, cheapest)
         {
             $lookup: {
                 from: "components",
@@ -1204,24 +1258,20 @@ var buildComputerByBudget = function (maxBudget) {
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $and: [
-                                    { $eq: ["$type", "Motherboard"] },
-                                    { $eq: ["$specs.socket", "$$cpu_socket"] },
-                                    { $eq: [{ $type: "$price" }, "number"] }
-                                ]
-                            }
+                            type: "Motherboard",
+                            price: { $type: "number" },
+                            $expr: { $eq: ["$specs.socket", "$$cpu_socket"] }
                         }
                     },
                     { $sort: { price: 1 } },
-                    { $limit: 5 }
+                    { $limit: 1 }
                 ],
                 as: "mobo"
             }
         },
         { $unwind: "$mobo" },
 
-        // 3) RAM - Generation compatibility (DDR4/DDR5)
+        // 3) RAM (match DDR generation when known)
         {
             $addFields: {
                 required_ram_type: {
@@ -1231,7 +1281,10 @@ var buildComputerByBudget = function (maxBudget) {
                             $switch: {
                                 branches: [
                                     { case: { $eq: ["$mobo.specs.socket", "AM5"] }, then: "DDR5" },
-                                    { case: { $eq: ["$mobo.specs.socket", "AM4"] }, then: "DDR4" }
+                                    { case: { $eq: ["$mobo.specs.socket", "LGA1851"] }, then: "DDR5" },
+                                    { case: { $eq: ["$mobo.specs.socket", "AM4"] }, then: "DDR4" },
+                                    { case: { $eq: ["$mobo.specs.socket", "LGA1200"] }, then: "DDR4" },
+                                    { case: { $eq: ["$mobo.specs.socket", "LGA1151"] }, then: "DDR4" }
                                 ],
                                 default: null
                             }
@@ -1247,51 +1300,53 @@ var buildComputerByBudget = function (maxBudget) {
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $and: [
-                                    { $eq: ["$type", "RAM"] },
-                                    { $eq: [{ $type: "$price" }, "number"] },
-                                    {
-                                        $cond: [
-                                            { $eq: ["$$ram_type", null] },
-                                            true,
-                                            { $eq: ["$specs.generation", "$$ram_type"] }
-                                        ]
-                                    }
-                                ]
-                            }
+                            type: "RAM",
+                            price: { $type: "number" },
+                            "specs.capacity_gb": { $type: "number" },
+                            $expr: { $eq: ["$specs.generation", "$$ram_type"] }
                         }
                     },
-                    { $sort: { "specs.capacity_gb": -1, price: 1 } },
-                    { $limit: 3 }
+                    { $sort: { price: 1 } },
+                    { $limit: 1 }
                 ],
                 as: "ram"
             }
         },
         { $unwind: "$ram" },
 
-        // 4) GPU
+        // 4) Compute remaining budget (for GPU)
+        {
+            $addFields: {
+                base_cost: { $add: ["$price", "$mobo.price", "$ram.price"] },
+                remaining_budget: { $subtract: [maxBudget, { $add: ["$price", "$mobo.price", "$ram.price"] }] }
+            }
+        },
+
+        // 5) GPU (best score within remaining budget)
+        // Use a small top-k so if later compatibility/budget fails, we still have fallbacks.
         {
             $lookup: {
                 from: "components",
+                let: { money_left: "$remaining_budget" },
                 pipeline: [
                     {
                         $match: {
                             type: "GPU",
                             price: { $type: "number" },
                             "specs.score": { $type: "number" },
-                            "specs.length_mm": { $type: "number" }
+                            "specs.length_mm": { $type: "number" },
+                            $expr: { $lte: ["$price", "$$money_left"] }
                         }
                     },
                     { $sort: { "specs.score": -1, price: 1 } },
-                    { $limit: 10 }
+                    { $limit: 5 }
                 ],
                 as: "gpu"
             }
         },
         { $unwind: "$gpu" },
 
-        // 5) CPU Cooler
+        // 6) CPU Cooler (cheapest)
         {
             $lookup: {
                 from: "components",
@@ -1305,7 +1360,7 @@ var buildComputerByBudget = function (maxBudget) {
         },
         { $unwind: "$cooler" },
 
-        // 6) Case - GPU length + Motherboard form factor support
+        // 7) Case (GPU length + motherboard form factor)
         {
             $lookup: {
                 from: "components",
@@ -1313,10 +1368,11 @@ var buildComputerByBudget = function (maxBudget) {
                 pipeline: [
                     {
                         $match: {
+                            type: "Case",
+                            price: { $type: "number" },
+                            "specs.max_gpu_length": { $type: "number" },
                             $expr: {
                                 $and: [
-                                    { $eq: ["$type", "Case"] },
-                                    { $eq: [{ $type: "$price" }, "number"] },
                                     { $gte: ["$specs.max_gpu_length", "$$gpu_len"] },
                                     {
                                         $in: [
@@ -1336,7 +1392,7 @@ var buildComputerByBudget = function (maxBudget) {
         },
         { $unwind: "$pc_case" },
 
-        // 7) Power Supply - Wattage verification
+        // 8) PSU (wattage sufficient)
         {
             $addFields: {
                 estimated_required_watts: {
@@ -1355,14 +1411,10 @@ var buildComputerByBudget = function (maxBudget) {
                 pipeline: [
                     {
                         $match: {
-                            $expr: {
-                                $and: [
-                                    { $eq: ["$type", "Power Supply"] },
-                                    { $eq: [{ $type: "$price" }, "number"] },
-                                    { $eq: [{ $type: "$specs.wattage" }, "number"] },
-                                    { $gte: ["$specs.wattage", "$$required_watts"] }
-                                ]
-                            }
+                            type: "Power Supply",
+                            price: { $type: "number" },
+                            "specs.wattage": { $type: "number" },
+                            $expr: { $gte: ["$specs.wattage", "$$required_watts"] }
                         }
                     },
                     { $sort: { price: 1 } },
@@ -1373,13 +1425,13 @@ var buildComputerByBudget = function (maxBudget) {
         },
         { $unwind: "$psu" },
 
-        // 8) Storage
+        // 9) Storage (cheapest)
         {
             $lookup: {
                 from: "components",
                 pipeline: [
                     { $match: { type: "Storage", price: { $type: "number" }, "specs.capacity_gb": { $type: "number" } } },
-                    { $sort: { "specs.capacity_gb": -1, price: 1 } },
+                    { $sort: { price: 1 } },
                     { $limit: 1 }
                 ],
                 as: "storage"
@@ -1387,20 +1439,11 @@ var buildComputerByBudget = function (maxBudget) {
         },
         { $unwind: "$storage" },
 
-        // Final output + compatibility report
+        // 10) Final projection + budget check
         {
             $project: {
                 _id: 0,
-                build_name: {
-                    $concat: [
-                        "Real-World Build ($",
-                        budgetLabel,
-                        "): ",
-                        "$name",
-                        " + ",
-                        "$gpu.name"
-                    ]
-                },
+                build_name: { $literal: buildNameLiteral },
                 components: {
                     cpu: "$name",
                     motherboard: "$mobo.name",
@@ -1410,13 +1453,6 @@ var buildComputerByBudget = function (maxBudget) {
                     psu: "$psu.name",
                     storage: "$storage.name",
                     cooler: "$cooler.name"
-                },
-                compatibility_report: {
-                    socket: "VERIFIED: CPU socket matches motherboard socket",
-                    ram_generation: "VERIFIED: RAM generation matches motherboard requirement",
-                    motherboard_fit: "VERIFIED: Motherboard form factor supported by case",
-                    gpu_clearance: "VERIFIED: GPU length fits inside case",
-                    power_supply: "VERIFIED: PSU wattage is sufficient"
                 },
                 compatibility_details: {
                     cpu_socket: "$requirements.socket_match",
@@ -1433,10 +1469,10 @@ var buildComputerByBudget = function (maxBudget) {
                 total_price: {
                     $add: [
                         "$price",
-                        "$cooler.price",
                         "$mobo.price",
                         "$ram.price",
                         "$gpu.price",
+                        "$cooler.price",
                         "$pc_case.price",
                         "$psu.price",
                         "$storage.price"
@@ -1446,19 +1482,13 @@ var buildComputerByBudget = function (maxBudget) {
             }
         },
 
-        // Budget filter + pick best
-        { $match: { total_price: { $lte: maxBudget } } },
+        { $match: { total_price: { $type: "number", $lte: maxBudget } } },
         { $sort: { performance_score: -1, total_price: 1 } },
         { $limit: 1 },
         { $out: "recommended_combos" }
     ]);
 
-    var best = null;
-    var count = db.recommended_combos.countDocuments();
-    if (count > 0) {
-        best = db.recommended_combos.findOne({}, { sort: { performance_score: -1 } });
-    }
-    return best;
+    return db.recommended_combos.findOne();
 };
 
 // ============================================================
