@@ -1278,15 +1278,11 @@ function section5_updatesAndDeletes() {
 // - Total price <= budget
 // ============================================================
 
-var buildComputerByBudget = function (maxBudget) {
-    db.recommended_combos.drop();
-
+function autoBuilderPipeline(maxBudget, buildNameLiteral) {
     // Leave budget for the rest of the parts
     var maxCpuPrice = maxBudget * 0.35;
-    var budgetLabel = maxBudget.toString();
-    var buildNameLiteral = "AutoBuild for $" + budgetLabel;
 
-    db.components.aggregate([
+    return [
         // 1) CPU (top candidates within CPU budget)
         {
             $match: {
@@ -1535,12 +1531,72 @@ var buildComputerByBudget = function (maxBudget) {
 
         { $match: { total_price: { $type: "number", $lte: maxBudget } } },
         { $sort: { performance_score: -1, total_price: 1 } },
-        { $limit: 1 },
-        { $out: "recommended_combos" }
-    ]);
+        { $limit: 1 }
+    ];
+}
+
+var buildComputerByBudget = function (maxBudget) {
+    db.recommended_combos.drop();
+
+    var budgetLabel = maxBudget.toString();
+    var buildNameLiteral = "AutoBuild for $" + budgetLabel;
+
+    var pipeline = autoBuilderPipeline(maxBudget, buildNameLiteral);
+    pipeline.push({ $out: "recommended_combos" });
+    db.components.aggregate(pipeline);
 
     return db.recommended_combos.findOne();
 };
+
+// Convenience alias (common typo in call-sites / docs)
+var buildComputerByBudge = buildComputerByBudget;
+
+function buildComputerByBudgetDoc(maxBudget, runIndex) {
+    var budgetLabel = maxBudget.toString();
+    var idx = (runIndex !== null && runIndex !== undefined) ? runIndex : null;
+    var buildNameLiteral = idx ? ("AutoBuild for $" + budgetLabel + " (run " + idx + ")") : ("AutoBuild for $" + budgetLabel);
+
+    var pipeline = autoBuilderPipeline(maxBudget, buildNameLiteral);
+    var doc = db.components.aggregate(pipeline).toArray()[0];
+    if (!doc) return null;
+
+    doc._id = ObjectId();
+    doc.target_budget = maxBudget;
+    doc.generated_at = new Date();
+    return doc;
+}
+
+function generateRecommendedCombosSamples(samples, minBudget, maxBudget) {
+    var n = (samples !== null && samples !== undefined) ? samples : 100;
+    var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 1000;
+    var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 3500;
+
+    if (n <= 0) return 0;
+    if (maxB < minB) {
+        var tmp = minB;
+        minB = maxB;
+        maxB = tmp;
+    }
+
+    db.recommended_combos.drop();
+    db.createCollection("recommended_combos");
+
+    var batch = [];
+    for (var i = 0; i < n; i++) {
+        var denom = (n === 1) ? 1 : (n - 1);
+        var t = i / denom;
+        var budget = Math.round(minB + (maxB - minB) * t);
+
+        var doc = buildComputerByBudgetDoc(budget, i + 1);
+        if (doc) batch.push(doc);
+    }
+
+    if (batch.length) {
+        db.recommended_combos.insertMany(batch);
+    }
+
+    return batch.length;
+}
 
 // ============================================================
 // סעיף 6: aggregate
@@ -1556,57 +1612,21 @@ function section6_aggregate() {
 // עטוף בפונקציה כדי להריץ ידנית.
 // ============================================================
 
-function section7_mapReduce() {
-    // MapReduce A: best build per budget tier
-    var buildsWithScores = db.builds
-        .aggregate([
-            {
-                $lookup: {
-                    from: "components",
-                    localField: "parts",
-                    foreignField: "_id",
-                    as: "part_details"
-                }
-            },
-            {
-                $project: {
-                    build_name: 1,
-                    total_price: 1,
-                    cpu_score: {
-                        $sum: {
-                            $map: {
-                                input: {
-                                    $filter: {
-                                        input: "$part_details",
-                                        cond: { $eq: ["$$this.type", "CPU"] }
-                                    }
-                                },
-                                in: "$$this.specs.score"
-                            }
-                        }
-                    },
-                    gpu_score: {
-                        $sum: {
-                            $map: {
-                                input: {
-                                    $filter: {
-                                        input: "$part_details",
-                                        cond: { $eq: ["$$this.type", "GPU"] }
-                                    }
-                                },
-                                in: "$$this.specs.score"
-                            }
-                        }
-                    }
-                }
-            },
-            { $addFields: { synthetic_score: { $add: ["$cpu_score", "$gpu_score"] } } }
-        ])
-        .toArray();
+function section7_mapReduce(samples, minBudget, maxBudget) {
+    // Generate many auto-build samples so MapReduce is meaningful.
+    // NOTE: This can be slow because it runs many aggregation pipelines.
+    // Keep a reasonable default so it doesn't look like it "hangs" in mongosh.
+    var n = (samples !== null && samples !== undefined) ? samples : 30;
+    var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 900;
+    var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 4000;
 
-    db.builds_with_scores.drop();
-    if (buildsWithScores.length > 0) {
-        db.builds_with_scores.insertMany(buildsWithScores);
+    var started = new Date();
+    print("[Section 7] Generating recommended combos: n=" + n + ", range=$" + minB + "-$" + maxB);
+    generateRecommendedCombosSamples(n, minB, maxB);
+    try {
+        print("[Section 7] recommended_combos count: " + db.recommended_combos.countDocuments());
+    } catch (e) {
+        // ignore
     }
 
     var mapBudgetTier = function () {
@@ -1624,10 +1644,11 @@ function section7_mapReduce() {
         }
 
         emit(tier, {
-            build_id: this._id,
+            combo_id: this._id,
             build_name: this.build_name,
-            score: this.synthetic_score,
-            price: this.total_price
+            score: this.performance_score,
+            price: this.total_price,
+            target_budget: this.target_budget
         });
     };
 
@@ -1635,6 +1656,8 @@ function section7_mapReduce() {
         var best = values[0];
         values.forEach(function (v) {
             if (v.score > best.score) {
+                best = v;
+            } else if (v.score === best.score && v.price < best.price) {
                 best = v;
             }
         });
@@ -1646,13 +1669,15 @@ function section7_mapReduce() {
             budget_tier: key,
             winner: reducedValue.build_name,
             performance_score: reducedValue.score,
-            actual_price: reducedValue.price
+            actual_price: reducedValue.price,
+            target_budget: reducedValue.target_budget
         };
     };
 
     db.best_builds_per_tier.drop();
-    db.builds_with_scores.mapReduce(mapBudgetTier, reduceBestBuild, {
+    db.recommended_combos.mapReduce(mapBudgetTier, reduceBestBuild, {
         out: "best_builds_per_tier",
+        query: { total_price: { $type: "number" }, performance_score: { $type: "number" } },
         finalize: finalizeBestBuild
     });
 
@@ -1760,12 +1785,16 @@ function section7_mapReduce() {
         finalize: finalizeUserGPU
     });
 
-    return {
+    var out = {
         best_builds_per_tier: db.best_builds_per_tier.countDocuments(),
         manufacturer_stats_mr: db.manufacturer_stats_mr.countDocuments(),
         rating_distribution: db.rating_distribution.countDocuments(),
         user_gpu_spending: db.user_gpu_spending.countDocuments()
     };
+
+    var ended = new Date();
+    print("[Section 7] Done in " + Math.round((ended - started) / 1000) + "s");
+    return out;
 }
 
 // ריצה ידנית מומלצת לפי סדר הסעיפים:
