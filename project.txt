@@ -264,7 +264,6 @@ function cpuToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             socket: socket,
             cores: cores,
@@ -310,7 +309,6 @@ function gpuToComponent(raw) {
         name: manufacturer + " " + chipset,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             vram: vram,
             length_mm: length,
@@ -388,7 +386,6 @@ function motherboardToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             socket: socket,
             form_factor: normalizeSpaces(raw.form_factor),
@@ -434,7 +431,6 @@ function caseToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             form_factor: caseType,
             supported_motherboards: supportedBoards,
@@ -474,7 +470,6 @@ function ramToComponent(raw) {
         name: name,
         manufacturer: normalizeSpaces(raw.name).split(" ")[0],
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             capacity_gb: capacity,
             speed_mhz: speedMhz,
@@ -507,7 +502,6 @@ function storageToComponent(raw) {
         name: name,
         manufacturer: normalizeSpaces(raw.name).split(" ")[0],
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             capacity_gb: capacityGb,
             storage_type: normalizeSpaces(raw.type),
@@ -547,7 +541,6 @@ function cpuCoolerToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: price,
-        tags: ["ETL"],
         specs: {
             kind: coolerKind,
             rpm_min: rpmMin,
@@ -572,7 +565,6 @@ function psuToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             wattage: safeNumber(raw.wattage, null),
             efficiency: normalizeSpaces(raw.efficiency),

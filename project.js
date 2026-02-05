@@ -264,7 +264,6 @@ function cpuToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             socket: socket,
             cores: cores,
@@ -300,6 +299,7 @@ function normalizeGpuChipset(chipset) {
 function gpuToComponent(raw) {
     var chipset = normalizeGpuChipset(raw.chipset);
     var manufacturer = detectGpuManufacturer(chipset);
+    var model = raw && raw.name ? normalizeSpaces(raw.name) : null;
     var vram = safeNumber(raw.memory, null);
     var length = safeNumber(raw.length, null);
     var score = (vram !== null) ? (vram * 200) : null;
@@ -307,11 +307,12 @@ function gpuToComponent(raw) {
     return {
         _id: ObjectId(),
         type: "GPU",
-        name: manufacturer + " " + chipset,
+        name: model ? (manufacturer + " " + chipset + " - " + model) : (manufacturer + " " + chipset),
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
+            chipset: chipset,
+            model: model,
             vram: vram,
             length_mm: length,
             score: score
@@ -388,7 +389,6 @@ function motherboardToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             socket: socket,
             form_factor: normalizeSpaces(raw.form_factor),
@@ -434,7 +434,6 @@ function caseToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             form_factor: caseType,
             supported_motherboards: supportedBoards,
@@ -474,7 +473,6 @@ function ramToComponent(raw) {
         name: name,
         manufacturer: normalizeSpaces(raw.name).split(" ")[0],
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             capacity_gb: capacity,
             speed_mhz: speedMhz,
@@ -507,7 +505,6 @@ function storageToComponent(raw) {
         name: name,
         manufacturer: normalizeSpaces(raw.name).split(" ")[0],
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             capacity_gb: capacityGb,
             storage_type: normalizeSpaces(raw.type),
@@ -547,7 +544,6 @@ function cpuCoolerToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: price,
-        tags: ["ETL"],
         specs: {
             kind: coolerKind,
             rpm_min: rpmMin,
@@ -572,7 +568,6 @@ function psuToComponent(raw) {
         name: name,
         manufacturer: manufacturer,
         price: safeNumber(raw.price, null),
-        tags: ["ETL"],
         specs: {
             wattage: safeNumber(raw.wattage, null),
             efficiency: normalizeSpaces(raw.efficiency),
@@ -1072,38 +1067,92 @@ function getRamCount() {
 // ============================================================
 
 function section4_findAndQuery() {
-    // 1) Simple find with projection
+    print("\n--- Section 4: Queries ---");
+
+    // 1) Basic Find + Projection
+    print("1) Simple Query (CPUs):");
     db.components
         .find({ type: "CPU" }, { name: 1, price: 1, _id: 0 })
-        .pretty();
-
-    // 2) Comparison operator $gt
-    db.components
-        .find({ type: "GPU", price: { $gt: 1000 } }, { name: 1, price: 1, _id: 0 })
-        .pretty();
-
-    // 3) Sort + Skip + Limit
-    db.components
-        .find({}, { name: 1, price: 1, type: 1, _id: 0 })
-        .sort({ price: -1 })
-        .skip(1)
         .limit(2)
         .pretty();
 
-    // 4) Regex search
+    // 2) Embedded Document + Array Query (Requirement: Embedded & Arrays)
+    // Users -> orders[] -> items[] (nested embedded arrays)
+    // Find users who bought an expensive GPU item.
+    print("\n2) Embedded & Array Query (Users with expensive GPU items):");
+    db.users
+        .find(
+            {
+                orders: {
+                    $elemMatch: {
+                        items: {
+                            $elemMatch: { type: "GPU", price: { $gt: 1000 } }
+                        }
+                    }
+                }
+            },
+            { username: 1, email: 1, orders: 1, _id: 0 }
+        )
+        .limit(5)
+        .pretty();
+
+    // 3) Referenced Data Query (Requirement: Referenced)
+    // Builds contain parts[] with ObjectId references to components.
+    print("\n3) Referenced Data Query (Builds containing specific Part ID):");
+    var cpuDoc = db.components.findOne({ type: "CPU" }, { _id: 1 });
+    if (!cpuDoc) {
+        print("No CPU found in components. Seed first, then re-run Section 4.");
+    } else {
+        db.builds
+            .find({ parts: cpuDoc._id }, { build_name: 1, creator_name: 1, _id: 0 })
+            .pretty();
+    }
+
+    // 4) Sort + Skip + Limit + toArray (Requirement: Combine arguments)
+    print("\n4) Sort, Skip, Limit & toArray (Expensive GPUs):");
+    var expensiveGpus = db.components
+        .find({ type: "GPU", price: { $type: "number" } }, { name: 1, price: 1, _id: 0 })
+        .sort({ price: -1 })
+        .skip(1)
+        .limit(2)
+        .toArray();
+    printjson(expensiveGpus);
+
+    // 5) forEach Loop (Requirement: usage of forEach)
+    print("\n5) Using forEach loop (Budget items):");
     db.components
-        .find({ name: { $regex: "ASUS", $options: "i" } }, { name: 1, type: 1, _id: 0 })
+        .find({ price: { $type: "number", $lt: 50 } }, { name: 1, price: 1, _id: 0 })
+        .limit(3)
+        .forEach(function (doc) {
+            print(" * Cheap Deal: " + doc.name + " costs only $" + doc.price);
+        });
+
+    // 6) Complex Logical Query ($or + Regex)
+    print("\n6) Logical $or + Regex:");
+    db.components
+        .find(
+            {
+                $or: [
+                    { name: { $regex: "Corsair", $options: "i" } },
+                    { name: { $regex: "Samsung", $options: "i" } }
+                ]
+            },
+            { name: 1, type: 1, _id: 0 }
+        )
         .limit(3)
         .pretty();
 
-    // 5) Logical operator $or
-    db.components
-        .find({ $or: [{ type: "Case" }, { type: "Power Supply" }] }, { name: 1, type: 1, _id: 0 })
-        .limit(4)
-        .pretty();
+    // 7) Count
+    print("\n7) Count (Total Motherboards):");
+    var count;
+    try {
+        count = db.components.countDocuments({ type: "Motherboard" });
+    } catch (e) {
+        count = db.components.find({ type: "Motherboard" }).count();
+    }
+    print("Total Motherboards: " + count);
 
-    // 6) Count example
-    return getRamCount();
+    return "Queries Completed";
 }
 
 // ============================================================
@@ -1140,7 +1189,7 @@ function section5_updatesAndDeletes() {
     );
     db.components.updateMany(
         { manufacturer: "NVIDIA", price: { $type: "number" } },
-        { $inc: { price: -10 } }
+        { $inc: { price: 10 } }
     );
 
     // $addToSet - add a tag without duplicates
@@ -1461,6 +1510,8 @@ var buildComputerByBudget = function (maxBudget) {
                     selected_ram_generation: "$ram.specs.generation",
                     motherboard_form_factor: "$mobo.specs.form_factor",
                     case_supported_motherboards: "$pc_case.specs.supported_motherboards",
+                    gpu_chipset: "$gpu.specs.chipset",
+                    gpu_model: "$gpu.specs.model",
                     gpu_length_mm: "$gpu.specs.length_mm",
                     case_max_gpu_length_mm: "$pc_case.specs.max_gpu_length",
                     required_watts_estimate: "$estimated_required_watts",
