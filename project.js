@@ -523,13 +523,8 @@ if (!globalThis.__MPP_SEEDED__) {
 }
 
 // ============================================================
-<<<<<<< HEAD
-// Section 3: JSON + JavaScript (Functions and Processing)
-// Note: JSON loading is handled in data.js via cat() + JSON.parse()
-=======
 // Section 3: JSON + JavaScript (Functions and processing)
 // Note: JSON loading is done in data.js using cat() + JSON.parse()
->>>>>>> 9261bb5 (Refactor MongoDB examples and translate comments)
 // ============================================================
 
 function getCheapCpuNames(limit) {
@@ -571,12 +566,7 @@ function getRamCount() {
 }
 
 // ============================================================
-<<<<<<< HEAD
-// Section 4: Find / Query
-// All examples are wrapped in a function for manual execution.
-=======
 // Section 4: Search and Retrieval (Queries) - clean version
->>>>>>> 9261bb5 (Refactor MongoDB examples and translate comments)
 // ============================================================
 
 // 1. Simple query with Projection and use of limit
@@ -687,12 +677,7 @@ db.components.find(
 
 
 // ============================================================
-<<<<<<< HEAD
-// Section 5: Updates and Deletes
-// Wrapped in a function for manual execution. Includes drop/rename/remove.
-=======
 // Section 5: Updates & Deletes
->>>>>>> 9261bb5 (Refactor MongoDB examples and translate comments)
 // ============================================================
 
 // 1. $set - Update standard fields
@@ -835,19 +820,55 @@ db.temp_remove_demo.drop();
 // - Total price <= budget
 // ============================================================
 
-function autoBuilderPipeline(maxBudget, buildNameLiteral) {
-    // Leave budget for the rest of the parts
-    var maxCpuPrice = maxBudget * 0.35;
+function autoBuilderPipeline(maxBudget, buildNameLiteral, usageType) {
+    // Normalize usageType (default to "gaming" if not specified)
+    var usage = (usageType || "gaming").toLowerCase();
+
+    // Dynamic budget allocation based on usage type
+    var cpuBudgetRatio, minRamGb, gpuScoreMultiplier, cpuNamePreference;
+
+    if (usage === "workstation") {
+        // Workstation: CPU is king, need lots of cores for rendering/multitasking
+        cpuBudgetRatio = 0.40;      // 40% for CPU (Intel i9 / Ryzen 9)
+        minRamGb = 32;              // Minimum 32GB RAM for heavy workloads
+        gpuScoreMultiplier = 1.0;   // GPU score weighted normally
+        cpuNamePreference = null;   // No brand preference (both Intel/AMD excel here)
+    } else if (usage === "budget") {
+        // Budget: Best bang for buck, balanced approach
+        cpuBudgetRatio = 0.30;      // 30% for CPU
+        minRamGb = 16;              // 16GB is enough
+        gpuScoreMultiplier = 1.2;   // Slightly prefer better GPU
+        cpuNamePreference = null;
+    } else {
+        // Gaming (default): GPU is king, AMD X3D CPUs excel due to L3 cache
+        cpuBudgetRatio = 0.25;      // Only 25% for CPU, save money for GPU
+        minRamGb = 16;              // 16GB is enough for gaming
+        gpuScoreMultiplier = 1.5;   // GPU score weighted 50% more
+        cpuNamePreference = "X3D";  // Prefer AMD X3D chips (7800X3D, 9800X3D)
+    }
+
+    var maxCpuPrice = maxBudget * cpuBudgetRatio;
+
+    // Build CPU match criteria (optionally prefer X3D for gaming)
+    var cpuMatchCriteria = {
+        type: "CPU",
+        price: { $type: "number", $lte: maxCpuPrice },
+        "specs.score": { $type: "number" },
+        "requirements.socket_match": { $exists: true, $ne: null }
+    };
+
+    // For gaming, try to find X3D CPUs first (they have massive L3 cache)
+    // If cpuNamePreference is set, add a regex filter
+    if (cpuNamePreference) {
+        cpuMatchCriteria.name = { $regex: cpuNamePreference, $options: "i" };
+    }
 
     return [
         // 1) CPU (top candidates within CPU budget)
+        // Gaming: Prefers AMD X3D (7800X3D, 9800X3D) for cache advantage
+        // Workstation: Any high-core CPU (Intel i9, Ryzen 9)
         {
-            $match: {
-                type: "CPU",
-                price: { $type: "number", $lte: maxCpuPrice },
-                "specs.score": { $type: "number" },
-                "requirements.socket_match": { $exists: true, $ne: null }
-            }
+            $match: cpuMatchCriteria
         },
         { $sort: { "specs.score": -1, price: 1 } },
         { $limit: 10 },
@@ -895,6 +916,8 @@ function autoBuilderPipeline(maxBudget, buildNameLiteral) {
                 }
             }
         },
+        // 3b) RAM lookup - respects minRamGb based on usage type
+        // Workstation: 32GB minimum | Gaming/Budget: 16GB minimum
         {
             $lookup: {
                 from: "components",
@@ -904,7 +927,7 @@ function autoBuilderPipeline(maxBudget, buildNameLiteral) {
                         $match: {
                             type: "RAM",
                             price: { $type: "number" },
-                            "specs.capacity_gb": { $type: "number" },
+                            "specs.capacity_gb": { $type: "number", $gte: minRamGb },
                             $expr: { $eq: ["$specs.generation", "$$ram_type"] }
                         }
                     },
@@ -1092,13 +1115,32 @@ function autoBuilderPipeline(maxBudget, buildNameLiteral) {
     ];
 }
 
-var buildComputerByBudget = function (maxBudget) {
+// ============================================================
+// Wrapper functions for the Auto-Builder
+// These provide convenient ways to run the pipeline
+// ============================================================
+
+/**
+ * Build a PC within budget and save to recommended_combos collection.
+ * 
+ * @param {number} maxBudget - Maximum budget in USD (e.g., 1500)
+ * @param {string} usageType - "gaming" | "workstation" | "budget" (default: "gaming")
+ * @returns {object} The generated build document
+ * 
+ * EXAMPLES:
+ *   buildComputerByBudget(1500, "gaming")      // Gaming rig at $1500
+ *   buildComputerByBudget(2500, "workstation") // Workstation at $2500
+ *   buildComputerByBudget(1000, "budget")      // Budget build at $1000
+ *   buildComputerByBudget(2000)                // Defaults to gaming
+ */
+var buildComputerByBudget = function (maxBudget, usageType) {
     db.recommended_combos.drop();
 
+    var usage = usageType || "gaming";
     var budgetLabel = maxBudget.toString();
-    var buildNameLiteral = "AutoBuild for $" + budgetLabel;
+    var buildNameLiteral = usage.charAt(0).toUpperCase() + usage.slice(1) + " Build for $" + budgetLabel;
 
-    var pipeline = autoBuilderPipeline(maxBudget, buildNameLiteral);
+    var pipeline = autoBuilderPipeline(maxBudget, buildNameLiteral, usage);
     pipeline.push({ $out: "recommended_combos" });
     db.components.aggregate(pipeline);
 
@@ -1108,17 +1150,25 @@ var buildComputerByBudget = function (maxBudget) {
 // Convenience alias (common typo in call-sites / docs)
 var buildComputerByBudge = buildComputerByBudget;
 
-function buildComputerByBudgetDoc(maxBudget, runIndex) {
+/**
+ * Build a PC and return document (without saving to collection).
+ * Used internally by generateRecommendedCombosSamples.
+ */
+function buildComputerByBudgetDoc(maxBudget, runIndex, usageType) {
+    var usage = usageType || "gaming";
     var budgetLabel = maxBudget.toString();
     var idx = (runIndex !== null && runIndex !== undefined) ? runIndex : null;
-    var buildNameLiteral = idx ? ("AutoBuild for $" + budgetLabel + " (run " + idx + ")") : ("AutoBuild for $" + budgetLabel);
+    var buildNameLiteral = idx
+        ? (usage.charAt(0).toUpperCase() + usage.slice(1) + " Build for $" + budgetLabel + " (run " + idx + ")")
+        : (usage.charAt(0).toUpperCase() + usage.slice(1) + " Build for $" + budgetLabel);
 
-    var pipeline = autoBuilderPipeline(maxBudget, buildNameLiteral);
+    var pipeline = autoBuilderPipeline(maxBudget, buildNameLiteral, usage);
     var doc = db.components.aggregate(pipeline).toArray()[0];
     if (!doc) return null;
 
     doc._id = ObjectId();
     doc.target_budget = maxBudget;
+    doc.usage_type = usage;
     doc.generated_at = new Date();
     return doc;
 }
@@ -1354,13 +1404,8 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
     return out;
 }
 
-<<<<<<< HEAD
-// Recommended manual execution order:
-// 1) (Already ran above) Setup + insertMany/insertOne
-=======
 // Recommended manual run order by section:
 // 1) (already ran above) setup + insertMany/insertOne
->>>>>>> 9261bb5 (Refactor MongoDB examples and translate comments)
 // 2) section4_findAndQuery()
 // 3) section5_updatesAndDeletes()
 // 4) section6_aggregate() or buildComputerByBudget(<budget>)
