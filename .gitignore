@@ -1,2 +1,10 @@
 # PC Part Dataset repository (cloned for data extraction)
 pc-part-dataset/
+
+# Section 6 related files
+README_SECTION6.md
+project_section6_improved.js
+SECTION6_EXPLANATION.md
+
+# Kiro related files
+.kiro/

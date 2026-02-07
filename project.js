@@ -64,7 +64,8 @@ if (!globalThis.__MPP_SEEDED__) {
         var __mppRepo = null;
         try {
             if (typeof process !== "undefined" && process.env && process.env.USERPROFILE) {
-                __mppRepo = process.env.USERPROFILE.replace(/\\/g, "/") + "/source/repos/MongopPcPartPicker";
+                // Modified to work on user's machine, but now made more dynamic using pwd()
+                __mppRepo = (typeof pwd === "function") ? pwd() : "c:/Users/Ron/Documents/GitHub/Mongo-PartPicker";
                 globalThis.__MPP_REPO_ROOT__ = __mppRepo;
             }
         } catch (e) {
