@@ -329,6 +329,9 @@ function stepMotherboard(cpuIndex) {
     buildState.spent += cpu.price;
     buildState.step = 2;
 
+    var cpuSocket = cpu.specs.socket;
+    var remaining = buildState.budget - buildState.spent;
+
     // Smart Cap: Motherboard shouldn't be > 15% of total budget (unless budget is huge)
     // But allow at least $150 for basic boards
     var maxMoboPrice = Math.max(150, buildState.budget * 0.15);
