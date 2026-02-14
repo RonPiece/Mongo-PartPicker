@@ -2,32 +2,22 @@
 // Section 6: Interactive PC Builder (Incremental Selection)
 // ============================================================
 //
-// This section demonstrates MongoDB's Aggregation Framework
-// through an interactive, step-by-step PC builder.
+// Pipeline Stages: $match, $project, $lookup (Self-Join),
+//   $unwind, $group, $sort, $limit, $out, $expr
 //
-// Pipeline Stages Used:
-//   $match, $project, $lookup, $unwind, $group,
-//   $sort, $limit, $out, $expr
+// Math Operators: $add, $subtract, $multiply, $divide, $round
+// Accumulators:   $first, $sum, $avg, $min, $max, $push
 //
-// Mathematical Operators:
-//   $add, $subtract, $multiply
-//
-// Group Accumulators:
-//   $first, $sum, $avg, $min, $max, $push
-//
-// Section 3 Compliance (JS functions):
-//   - getProfileParams()        — dynamic profile configuration
-//   - calculateWeightedScore()  — weighted scoring
-//   - calculateRequiredWatts()  — PSU wattage estimation
-//   - padRight(), padLeft()     — formatted output alignment
-//   - printComponentList()      — numbered component display
+// Section 3 JS Functions:
+//   getProfileParams(), calculateWeightedScore(),
+//   calculateRequiredWatts(), getCoolerReserve(),
+//   getMinCosts(), futureReserve(), validateAndSave()
 //
 // Usage:
 //   load("project_section6_interactive.js")
 //   stepCPU(1500, "gaming")   → shows top CPUs
-//   pick(3)                    → picks #3 from the list, shows next step
-//   pick(2)                    → picks #2, shows next step
-//   ...                        → keep picking until finalizeBuild
+//   pick(3)                    → picks #3, shows next step
+//   ...                        → keep picking until done
 //
 // ============================================================
 
@@ -36,43 +26,42 @@
 // Section 3: Profile Configuration (JS function)
 // ============================================================
 
+/**
+ * מחזיר פרמטרים לפי פרופיל שימוש.
+ * @param {string} usageType - gaming / workstation / budget / enthusiast
+ * @returns {object} פרמטרים: יחסי תקציב, RAM מינימלי, משקלות ציון
+ */
 function getProfileParams(usageType) {
     var usage = (usageType || "gaming").toLowerCase();
 
+    // Budget caps per category — prevents any single component from eating the budget
+    // CPU + GPU are performance parts (get bigger share), rest are support parts (capped low)
     var profiles = {
         gaming: {
             name: "Gaming",
-            cpuBudgetRatio: 0.25,
-            gpuBudgetRatio: 0.45,
-            minRamGb: 16,
-            preferredRamGb: 32,
+            cpuCap: 0.25, moboCap: 0.18, ramCap: 0.12, gpuCap: 0.40, storageCap: 0.10, coolerCap: 0.08,
+            minRamGb: 16, maxRamGb: 32, minStorageGb: 500,
             maxStorageGb: 4000,
             scoringWeights: { gpu: 0.6, cpu: 0.4, ram: 0.0 }
         },
         workstation: {
             name: "Workstation",
-            cpuBudgetRatio: 0.40,
-            gpuBudgetRatio: 0.25,
-            minRamGb: 32,
-            preferredRamGb: 64,
+            cpuCap: 0.35, moboCap: 0.20, ramCap: 0.15, gpuCap: 0.30, storageCap: 0.12, coolerCap: 0.10,
+            minRamGb: 32, maxRamGb: 128, minStorageGb: 1000,
             maxStorageGb: 16000,
             scoringWeights: { cpu: 0.5, ram: 0.3, gpu: 0.2 }
         },
         budget: {
             name: "Budget",
-            cpuBudgetRatio: 0.30,
-            gpuBudgetRatio: 0.35,
-            minRamGb: 16,
-            preferredRamGb: 16,
+            cpuCap: 0.25, moboCap: 0.12, ramCap: 0.10, gpuCap: 0.35, storageCap: 0.08, coolerCap: 0.06,
+            minRamGb: 16, maxRamGb: 32, minStorageGb: 240,
             maxStorageGb: 2000,
             scoringWeights: { gpu: 0.5, cpu: 0.3, ram: 0.2 }
         },
         enthusiast: {
             name: "Enthusiast",
-            cpuBudgetRatio: 0.30,
-            gpuBudgetRatio: 0.40,
-            minRamGb: 64,
-            preferredRamGb: 128,
+            cpuCap: 0.28, moboCap: 0.18, ramCap: 0.15, gpuCap: 0.40, storageCap: 0.12, coolerCap: 0.10,
+            minRamGb: 64, maxRamGb: 128, minStorageGb: 1000,
             maxStorageGb: 8000,
             scoringWeights: { gpu: 0.5, cpu: 0.4, ram: 0.1 }
         }
@@ -86,27 +75,65 @@ function getProfileParams(usageType) {
 // Section 3: Scoring & Wattage (JS functions)
 // ============================================================
 
+/** ציון ביצועים משוקלל לפי פרופיל */
 function calculateWeightedScore(cpuScore, gpuScore, ramCapacity, weights) {
-    var cpu = (cpuScore || 0) * (weights.cpu || 0);
-    var gpu = (gpuScore || 0) * (weights.gpu || 0);
-    var ram = (ramCapacity || 0) * (weights.ram || 0);
-    return Math.round(cpu + gpu + ram);
+    return Math.round(
+        (cpuScore || 0) * (weights.cpu || 0) +
+        (gpuScore || 0) * (weights.gpu || 0) +
+        (ramCapacity || 0) * (weights.ram || 0)
+    );
 }
 
-function calculateRequiredWatts(cpuTdp, gpuVram) {
-    var cpu = cpuTdp || 65;
-    var gpu = (gpuVram || 8) * 20;
-    var safety = 100;
-    return cpu + gpu + safety;
+/**
+ * דרישת ספק כוח — משתמש ב-Score לחישוב TDP אפקטיבי + 25% מרווח
+ * (i9-12900F רשום 65W אבל שואב 200W+ בפועל)
+ */
+function calculateRequiredWatts(cpuTdp, gpuVram, cpuScore) {
+    var effectiveCpu = cpuTdp || 65;
+    // High-perf CPUs draw far more than listed TDP
+    if ((cpuScore || 0) > 1500 && effectiveCpu < 150) effectiveCpu = 150;
+    if ((cpuScore || 0) > 2000 && effectiveCpu < 200) effectiveCpu = 200;
+    var gpuWatts = (gpuVram || 8) * 20;
+    return Math.round((effectiveCpu + gpuWatts) * 1.25) + 50; // 25% margin + 50W buffer
 }
 
-// Cooler budget reservation — based on CPU TDP
-// Returns minimum $ to reserve for a cooler that can handle this CPU
-function getCoolerReserve(tdp) {
-    if (tdp > 125) return 60;    // high-end: needs liquid or big tower cooler
-    if (tdp > 95) return 35;    // mid-range: decent tower cooler
-    if (tdp > 65) return 20;    // modest: basic tower cooler
-    return 10;                   // low-TDP: stock-class cooler is fine
+/**
+ * שריון מינימלי למקרר — Score מעל 1500 = TDP אפקטיבי 150W
+ */
+function getCoolerReserve(tdp, cpuScore) {
+    var effectiveTdp = tdp || 65;
+    if ((cpuScore || 0) > 1500 && effectiveTdp < 150) effectiveTdp = 150;
+    if ((cpuScore || 0) > 2000 && effectiveTdp < 200) effectiveTdp = 200;
+
+    if (effectiveTdp >= 150) return 80;
+    if (effectiveTdp >= 125) return 60;
+    if (effectiveTdp >= 95) return 40;
+    if (effectiveTdp > 65) return 25;
+    return 15;
+}
+
+/**
+ * Section 3: בדיקת תאימות form factor — האם המארז מתאים ללוח-האם?
+ * Full Tower > ATX > MicroATX > Mini ITX
+ */
+function caseSupportsMotherboard(caseForm, moboForm) {
+    var cf = (caseForm || "").toLowerCase();
+    var mf = (moboForm || "").toLowerCase();
+    // Full/EATX tower fits everything
+    if (cf.indexOf("full") >= 0 || cf.indexOf("eatx") >= 0) return true;
+    // ATX mid tower: fits ATX, MicroATX, Mini ITX (not EATX)
+    if (cf.indexOf("atx") >= 0 && cf.indexOf("micro") < 0 && cf.indexOf("mini") < 0) {
+        return mf.indexOf("eatx") < 0;
+    }
+    // MicroATX tower: fits MicroATX and Mini ITX only
+    if (cf.indexOf("micro") >= 0) {
+        return mf.indexOf("micro") >= 0 || mf.indexOf("mini") >= 0;
+    }
+    // Mini ITX: fits Mini ITX only
+    if (cf.indexOf("mini") >= 0) {
+        return mf.indexOf("mini") >= 0;
+    }
+    return true; // unknown form factor → allow
 }
 
 
@@ -132,13 +159,12 @@ function formatPrice(p) {
 
 function truncate(str, max) {
     str = String(str);
-    if (str.length <= max) return str;
-    return str.substring(0, max - 2) + "..";
+    return str.length <= max ? str : str.substring(0, max - 2) + "..";
 }
 
 
 // ============================================================
-// Global Build State — tracks selections across steps
+// Global Build State
 // ============================================================
 
 var buildState = {
@@ -147,34 +173,140 @@ var buildState = {
     params: null,
     spent: 0,
     step: 0,
+    buildTier: 1,
+    minCosts: {},
     lastResults: [],
     selections: {
-        cpu: null,
-        motherboard: null,
-        ram: null,
-        gpu: null,
-        storage: null,
-        cooler: null,
-        psu: null,
-        pcCase: null
+        cpu: null, motherboard: null, ram: null, gpu: null,
+        storage: null, cooler: null, psu: null, pcCase: null
     }
 };
 
-// Recommended sockets for new builds (2020+)
 var MODERN_SOCKETS = ["AM4", "AM5", "LGA1200", "LGA1700", "LGA1851"];
 
 
 // ============================================================
-//  Helper: Print a formatted, aligned list of components
+// Section 6: Tier System — Price-Based Component Quality Tiers
+// aggregate with $match, $sort, $group ($push, $sum),
+// $project ($multiply, $floor, $arrayElemAt)
+// ============================================================
+
+/**
+ * Section 6: מחשב גבולות Tier לפי אחוזוני מחיר בDB.
+ * Entry (0–25%), Mid (25–60%), High (60–85%), Enthusiast (85%+)
+ */
+function getTierBoundaries(type) {
+    var result = db.components.aggregate([
+        { $match: { type: type, price: { $type: "number" } } },
+        { $sort: { price: 1 } },
+        {
+            $group: {
+                _id: null,
+                prices: { $push: "$price" },
+                total: { $sum: 1 }
+            }
+        },
+        {
+            $project: {
+                entry_max: { $arrayElemAt: ["$prices", { $floor: { $multiply: ["$total", 0.25] } }] },
+                mid_max: { $arrayElemAt: ["$prices", { $floor: { $multiply: ["$total", 0.60] } }] },
+                high_max: { $arrayElemAt: ["$prices", { $floor: { $multiply: ["$total", 0.85] } }] }
+            }
+        }
+    ]).toArray();
+    return result[0] || { entry_max: 100, mid_max: 300, high_max: 600 };
+}
+
+var TIER_NAMES = ["", "Entry", "Mid", "High", "Enthusiast"]; // 1-indexed
+function priceTier(price, bounds) {
+    if (price <= bounds.entry_max) return 1;
+    if (price <= bounds.mid_max) return 2;
+    if (price <= bounds.high_max) return 3;
+    return 4;
+}
+
+function tierToFloor(minTier, bounds) {
+    if (minTier <= 1) return 0;
+    if (minTier === 2) return bounds.entry_max;
+    if (minTier === 3) return bounds.mid_max;
+    return bounds.high_max;
+}
+
+
+// ============================================================
+// Section 3 + 6: Dynamic Budget Helpers
+// ============================================================
+
+/**
+ * שואל את הDB פעם אחת למחיר המינימלי לכל סוג רכיב.
+ * Section 6: aggregate with $group + $min accumulator
+ */
+function getMinCosts() {
+    var result = db.components.aggregate([
+        { $match: { price: { $type: "number", $gt: 0 } } },
+        { $group: { _id: "$type", minPrice: { $min: "$price" } } }
+    ]).toArray();
+    var mins = {};
+    for (var i = 0; i < result.length; i++) {
+        mins[result[i]._id] = result[i].minPrice;
+    }
+    return mins;
+}
+
+/**
+ * סוכם עלויות מינימום לרכיבים עתידיים — Quality-Aware.
+ * משתמש בדרישות אמיתיות (לא DB minimum) לקירור ולספק כוח.
+ */
+function futureReserve(types) {
+    var total = 0;
+    var cpuSel = buildState.selections.cpu;
+    var gpuSel = buildState.selections.gpu;
+    var cpuTdp = (cpuSel && cpuSel.specs && cpuSel.specs.tdp) || 65;
+    var cpuScore = (cpuSel && cpuSel.specs && cpuSel.specs.score) || 0;
+
+    for (var i = 0; i < types.length; i++) {
+        var t = types[i];
+        var minCost = buildState.minCosts[t] || 0;
+
+        // Quality override: actual cooler cost for this CPU
+        if (t === "CPU Cooler" && cpuSel) {
+            minCost = Math.max(minCost, getCoolerReserve(cpuTdp, cpuScore));
+        }
+
+        // Quality override: PSU must meet actual wattage requirements
+        if (t === "Power Supply" && cpuSel && gpuSel) {
+            var gpuVram = (gpuSel.specs && gpuSel.specs.vram) || 8;
+            var reqWatts = calculateRequiredWatts(cpuTdp, gpuVram, cpuScore);
+            // Find cheapest PSU that meets wattage (cached query)
+            if (!buildState._psuMinCache || buildState._psuMinCache.watts !== reqWatts) {
+                var psuResult = db.components.find({
+                    type: "Power Supply", "specs.wattage": { $gte: reqWatts },
+                    price: { $type: "number" }
+                }).sort({ price: 1 }).limit(1).toArray();
+                buildState._psuMinCache = {
+                    watts: reqWatts,
+                    price: psuResult.length > 0 ? psuResult[0].price : minCost
+                };
+            }
+            minCost = Math.max(minCost, buildState._psuMinCache.price);
+        }
+
+        total += minCost;
+    }
+    return total;
+}
+
+
+// ============================================================
+// Helper: Print formatted component list
 // ============================================================
 
 function printComponentList(results, columns) {
     if (results.length === 0) {
-        print("  ⚠  No components found matching the criteria.");
+        print("  (no components found)");
         return;
     }
 
-    // --- Header line ---
     var header = "   #   " + padRight("Name", 45) + padLeft("Price", 10);
     for (var h = 0; h < columns.length; h++) {
         header += padLeft(columns[h].label, columns[h].width || 10);
@@ -183,27 +315,21 @@ function printComponentList(results, columns) {
     print(header);
     print("  " + Array(header.length).join("─"));
 
-    // --- Data rows ---
     for (var i = 0; i < results.length; i++) {
         var r = results[i];
-
-        var idx = padLeft("[" + (i + 1) + "]", 5);
-        var name = padRight(truncate(r.name, 43), 45);
-        var price = padLeft(formatPrice(r.price), 10);
-
-        var line = "  " + idx + " " + name + price;
+        var line = "  " + padLeft("[" + (i + 1) + "]", 5) + " " +
+            padRight(truncate(r.name, 43), 45) +
+            padLeft(formatPrice(r.price), 10);
 
         for (var c = 0; c < columns.length; c++) {
-            var key = columns[c].key;
-            var w = columns[c].width || 10;
             var val = r;
-            var parts = key.split(".");
+            var parts = columns[c].key.split(".");
             for (var p = 0; p < parts.length; p++) {
                 val = val ? val[parts[p]] : null;
             }
-            var suffix = columns[c].suffix || "";
-            var display = (val !== null && val !== undefined) ? (val + suffix) : "—";
-            line += padLeft(String(display), w);
+            var display = (val !== null && val !== undefined)
+                ? (val + (columns[c].suffix || "")) : "—";
+            line += padLeft(String(display), columns[c].width || 10);
         }
         print(line);
     }
@@ -213,59 +339,100 @@ function printComponentList(results, columns) {
 
 // ============================================================
 // pick(index) — Universal selection shortcut
-//
-// Instead of typing stepMotherboard(3), just type pick(3).
-// It automatically calls the correct next-step function.
+// validateAndSave(index, key, newStep) — Extract repeated pattern
 // ============================================================
 
 function pick(index) {
-    var nextStep = buildState.step + 1;
-
-    if (nextStep === 2) return stepMotherboard(index);
-    if (nextStep === 3) return stepRAM(index);
-    if (nextStep === 4) return stepGPU(index);
-    if (nextStep === 5) return stepStorage(index);
-    if (nextStep === 6) return stepCooler(index);
-    if (nextStep === 7) return stepPSU(index);
-    if (nextStep === 8) return stepCase(index);
-    if (nextStep === 9) return finalizeBuild(index);
-
+    var next = buildState.step + 1;
+    if (next === 2) return stepMotherboard(index);
+    if (next === 3) return stepRAM(index);
+    if (next === 4) return stepGPU(index);
+    if (next === 5) return stepStorage(index);
+    if (next === 6) return stepCooler(index);
+    if (next === 7) return stepPSU(index);
+    if (next === 8) return stepCase(index);
+    if (next === 9) return finalizeBuild(index);
     print("  ERROR: No active build. Start with:  stepCPU(budget, 'gaming')");
+}
+
+/**
+ * Section 3: validates index, saves selection, updates spent.
+ * @returns {object|null} — הרכיב שנבחר, או null אם שגיאה
+ */
+function validateAndSave(index, key, newStep) {
+    if (buildState.step < newStep - 1) {
+        print("  ERROR: Complete previous step first.");
+        return null;
+    }
+    if (index < 1 || index > buildState.lastResults.length) {
+        print("  ERROR: Pick 1–" + buildState.lastResults.length);
+        return null;
+    }
+    var item = buildState.lastResults[index - 1];
+
+    // Budget protection: block picks that would exceed total budget by >10%
+    var totalAfter = buildState.spent + item.price;
+    if (totalAfter > buildState.budget * 1.10) {
+        print("  \u26d4 BLOCKED: " + item.name + " (" + formatPrice(item.price) +
+            ") would bring total to " + formatPrice(totalAfter) +
+            " — exceeds budget " + formatPrice(buildState.budget) + " by " +
+            Math.round((totalAfter / buildState.budget - 1) * 100) + "%.");
+        print("  → Pick a cheaper option.");
+        return null;
+    }
+
+    buildState.selections[key] = item;
+    buildState.spent += item.price;
+    buildState.step = newStep;
+    return item;
 }
 
 
 // ============================================================
 // Step 1: CPU Selection
-// stepCPU(budget, usageType)
-//
 // Section 6: aggregate() with $match, $project, $sort, $limit
 // ============================================================
 
 function stepCPU(budget, usageType) {
-    // Reset state for new build
     buildState.budget = budget;
     buildState.usage = usageType || "gaming";
     buildState.params = getProfileParams(buildState.usage);
     buildState.spent = 0;
     buildState.step = 1;
+    buildState.minCosts = getMinCosts();
     buildState.selections = {
         cpu: null, motherboard: null, ram: null, gpu: null,
         storage: null, cooler: null, psu: null, pcCase: null
     };
 
-    var maxCpuPrice = Math.round(budget * buildState.params.cpuBudgetRatio);
+    // Section 6: Cache tier boundaries once per build (optimization)
+    buildState.tiers = {
+        CPU: getTierBoundaries("CPU"),
+        Motherboard: getTierBoundaries("Motherboard"),
+        RAM: getTierBoundaries("RAM"),
+        GPU: getTierBoundaries("GPU"),
+        Storage: getTierBoundaries("Storage"),
+        "CPU Cooler": getTierBoundaries("CPU Cooler"),
+        PSU: getTierBoundaries("Power Supply"),
+        Case: getTierBoundaries("Case")
+    };
+    print("  \u2139 Tier boundaries cached for smart component matching");
+
+    // Dynamic cap: profile ratio cap, clamped by future minimums
+    var reserve = futureReserve(["Motherboard", "RAM", "GPU", "Storage", "CPU Cooler", "Power Supply", "Case"]);
+    var maxCpuPrice = Math.min(
+        Math.round(budget * buildState.params.cpuCap),
+        budget - reserve
+    );
 
     print("");
     print("  ╔════════════════════════════════════════════════════════╗");
-    print("  ║        Interactive PC Builder — " + padRight(buildState.params.name, 22) + "║");
-    print("  ║        Budget: " + padRight(formatPrice(budget), 39) + "║");
+    print("  ║   PC Builder — " + padRight(buildState.params.name + "  $" + budget, 40) + "║");
     print("  ╚════════════════════════════════════════════════════════╝");
-    print("");
-    print("  STEP 1/8 ─ Choose a CPU (max ~" + formatPrice(maxCpuPrice) + ")");
-    print("  ─────────────────────────────────────────");
+    print("  STEP 1/8 — CPU  (max " + formatPrice(maxCpuPrice) + ")");
 
-    // Section 6: Aggregation Pipeline with $match, $project, $sort, $limit
-    var cpuResults = db.components.aggregate([
+    // Section 6: Aggregation Pipeline
+    var results = db.components.aggregate([
         {
             $match: {
                 type: "CPU",
@@ -277,638 +444,640 @@ function stepCPU(budget, usageType) {
         },
         {
             $project: {
-                name: 1,
-                price: 1,
-                manufacturer: 1,
-                "specs.socket": 1,
-                "specs.cores": 1,
-                "specs.base_clock": 1,
-                "specs.boost_clock": 1,
-                "specs.tdp": 1,
-                "specs.score": 1
+                name: 1, price: 1, manufacturer: 1,
+                "specs.socket": 1, "specs.cores": 1,
+                "specs.tdp": 1, "specs.score": 1
             }
         },
-        { $sort: { price: -1 } },
+        { $sort: { "specs.score": -1 } },
         { $limit: 15 }
     ]).toArray();
 
-    buildState.lastResults = cpuResults;
-
-    printComponentList(cpuResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.socket", label: "Socket", width: 12 },
         { key: "specs.cores", label: "Cores", width: 7 },
         { key: "specs.tdp", label: "TDP", width: 6, suffix: "W" },
         { key: "specs.score", label: "Score", width: 8 }
     ]);
-
-    print("  → pick(<#>) to select your CPU.");
-    return cpuResults.length + " CPUs found";
+    print("  → pick(<#>)");
+    return results.length + " CPUs found";
 }
 
 
 // ============================================================
 // Step 2: Motherboard Selection
-// stepMotherboard(cpuIndex)
-//
-// Section 6: aggregate() with $match (socket filter), $sort, $limit
+// Section 6: $lookup (Self-Join) + $unwind + $match + $project
 // ============================================================
 
 function stepMotherboard(cpuIndex) {
-    if (buildState.step < 1) {
-        print("  ERROR: Run stepCPU(budget, usage) first!");
-        return;
-    }
-    if (cpuIndex < 1 || cpuIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
+    var cpu = validateAndSave(cpuIndex, "cpu", 2);
+    if (!cpu) return;
 
-    // Save CPU selection
-    var cpu = buildState.lastResults[cpuIndex - 1];
-    buildState.selections.cpu = cpu;
-    buildState.spent += cpu.price;
-    buildState.step = 2;
-
-    var cpuSocket = cpu.specs.socket;
     var remaining = buildState.budget - buildState.spent;
+    var reserve = futureReserve(["RAM", "GPU", "Storage", "CPU Cooler", "Power Supply", "Case"]);
+    // Dynamic cap: use higher of (budget*cap) or (20% of available) — prevents $1000 mobo
+    var available = remaining - reserve;
+    var maxPrice = Math.min(available, Math.max(
+        Math.round(buildState.budget * buildState.params.moboCap),
+        Math.round(available * 0.20)
+    ));
 
-    // Smart Cap: Motherboard shouldn't be > 15% of total budget (unless budget is huge)
-    // But allow at least $150 for basic boards
-    var maxMoboPrice = Math.max(150, buildState.budget * 0.15);
-    var effectiveBudget = Math.min(remaining, maxMoboPrice);
+    // Tier enforcement: mobo must be within ±1 tier of CPU
+    var cpuTier = priceTier(cpu.price, buildState.tiers.CPU);
+    buildState.buildTier = cpuTier; // Drives quality floor for ALL subsequent steps
+    var tierMin = Math.max(1, cpuTier - 1);
+    var tierMax = Math.min(4, cpuTier + 1);
+    var tierFloor = tierToFloor(tierMin, buildState.tiers.Motherboard);
 
-    print("");
-    print("  ✓ CPU: " + cpu.name + "  (" + formatPrice(cpu.price) + ")");
-    print("    Socket: " + cpuSocket + "   |   Remaining: " + formatPrice(remaining));
-    print("");
-    print("  STEP 2/8 ─ Choose a Motherboard  (Socket: " + cpuSocket + ", max rec. " + formatPrice(effectiveBudget) + ")");
-    print("  ─────────────────────────────────────────");
+    // Quality floor: high-perf CPUs (K-series, score>1500) need quality VRMs
+    var cpuScore = (cpu.specs && cpu.specs.score) || 0;
+    var cpuTdp = (cpu.specs && cpu.specs.tdp) || 65;
+    var minMoboPrice = tierFloor;
+    if (cpuScore > 1500 || cpuTdp >= 125) {
+        minMoboPrice = Math.max(minMoboPrice, Math.min(120, maxPrice));
+    }
 
-    // Section 6: Aggregation — filter by socket, sort by price desc
-    var moboResults = db.components.aggregate([
+    print("\n  ✓ CPU: " + cpu.name + " (" + formatPrice(cpu.price) + ")");
+    print("  ℹ Smart Logic: CPU is Tier " + TIER_NAMES[cpuTier] +
+        ". Filtering Motherboards for Tier " + TIER_NAMES[tierMin] + "–" + TIER_NAMES[tierMax] + "...");
+    print("  STEP 2/8 — Motherboard  (Socket: " + cpu.specs.socket +
+        ", min " + formatPrice(minMoboPrice) + " (Tier " + TIER_NAMES[tierMin] + "+)" +
+        ", max " + formatPrice(maxPrice) + ")");
+
+    // Section 6: $lookup Self-Join — CPU → Motherboard by socket
+    // מוצאים לוחות-אם תואמים לפי socket דרך Self-Join על אותה קולקציה
+    var results = db.components.aggregate([
+        // Stage 1: Match the selected CPU
+        { $match: { _id: cpu._id } },
+
+        // Stage 2: $lookup Self-Join — find components with matching socket
+        {
+            $lookup: {
+                from: "components",
+                localField: "requirements.socket_match",
+                foreignField: "specs.socket",
+                as: "socket_matches"
+            }
+        },
+
+        // Stage 3: $unwind — flatten matched array
+        { $unwind: "$socket_matches" },
+
+        // Stage 4: $match — keep only Motherboards within budget + quality floor
         {
             $match: {
-                type: "Motherboard",
-                "specs.socket": cpuSocket,
-                price: { $type: "number", $lte: effectiveBudget }
+                "socket_matches.type": "Motherboard",
+                "socket_matches.price": { $type: "number", $gte: minMoboPrice, $lte: maxPrice }
             }
         },
+
+        // Stage 5: $project — reshape to standard component format
         {
             $project: {
-                name: 1,
-                price: 1,
-                manufacturer: 1,
-                "specs.socket": 1,
-                "specs.form_factor": 1,
-                "specs.ram_type": 1,
-                "specs.max_ram": 1
+                _id: "$socket_matches._id",
+                name: "$socket_matches.name",
+                price: "$socket_matches.price",
+                manufacturer: "$socket_matches.manufacturer",
+                specs: "$socket_matches.specs"
             }
         },
-        { $sort: { price: -1 } },
-        { $limit: 15 }
+
+        // Stage 6-7: $sort + $limit — value first (ASC), wide range
+        { $sort: { price: 1 } },
+        { $limit: 30 }
     ]).toArray();
 
-    // Fallback: If no boards in smart budget, try full remaining budget
-    if (moboResults.length === 0) {
-        moboResults = db.components.find({
+    // Tier fallback: if tier-filtered Self-Join returned nothing, drop tier and try basic
+    if (results.length === 0) {
+        if (minMoboPrice > 0) {
+            print("  ⚠ Budget too low for Tier " + TIER_NAMES[tierMin] + " motherboard — reverting to basic compatibility...");
+        }
+        results = db.components.find({
             type: "Motherboard",
-            "specs.socket": cpuSocket,
-            price: { $type: "number", $lte: remaining } // Try full remaining code
-        }).sort({ price: 1 }).limit(10).toArray(); // Show cheapest valid options
+            "specs.socket": cpu.specs.socket,
+            price: { $type: "number", $lte: remaining }
+        }).sort({ price: 1 }).limit(15).toArray();
+    }
+    // Last resort: if still nothing (budget too tight), show cheapest available
+    if (results.length === 0) {
+        print("  \u26a0 No motherboards in budget \u2014 showing cheapest:");
+        results = db.components.find({
+            type: "Motherboard",
+            "specs.socket": cpu.specs.socket,
+            price: { $type: "number" }
+        }).sort({ price: 1 }).limit(10).toArray();
     }
 
-    // Fallback 2: If STILL nothing (e.g. over budget), show ANY compatible board
-    if (moboResults.length === 0) {
-        print("  ⚠  Budget exhausted! Showing over-budget options:");
-        moboResults = db.components.find({
-            type: "Motherboard",
-            "specs.socket": cpuSocket
-        }).sort({ price: 1 }).limit(5).toArray();
-    }
-
-    buildState.lastResults = moboResults;
-
-    printComponentList(moboResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.form_factor", label: "Form", width: 14 },
         { key: "specs.ram_type", label: "RAM", width: 7 },
         { key: "specs.max_ram", label: "MaxRAM", width: 8, suffix: "GB" }
     ]);
-
-    print("  → pick(<#>) to select your Motherboard.");
-    return moboResults.length + " motherboards found";
+    print("  → pick(<#>)");
+    return results.length + " motherboards found";
 }
 
 
 // ============================================================
 // Step 3: RAM Selection
-// stepRAM(moboIndex)
-//
 // Section 4: find().sort().limit() — filtered by DDR type
 // ============================================================
 
 function stepRAM(moboIndex) {
-    if (buildState.step < 2) {
-        print("  ERROR: Run stepMotherboard() first!");
-        return;
-    }
-    if (moboIndex < 1 || moboIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
+    var mobo = validateAndSave(moboIndex, "motherboard", 3);
+    if (!mobo) return;
 
-    // Save Motherboard selection
-    var mobo = buildState.lastResults[moboIndex - 1];
-    buildState.selections.motherboard = mobo;
-    buildState.spent += mobo.price;
-    buildState.step = 3;
-
-    var ramType = (mobo.specs && mobo.specs.ram_type) ? mobo.specs.ram_type : "DDR4";
-    var minRam = buildState.params.minRamGb;
     var remaining = buildState.budget - buildState.spent;
+    var reserve = futureReserve(["GPU", "Storage", "CPU Cooler", "Power Supply", "Case"]);
+    // Dynamic cap: use higher of (budget*cap) or (25% of available)
+    var available = remaining - reserve;
+    var maxPrice = Math.min(available, Math.max(
+        Math.round(buildState.budget * buildState.params.ramCap),
+        Math.round(available * 0.25)
+    ));
 
-    // Smart Cap: RAM shouldn't be > 10% of total budget
-    var maxRamPrice = Math.max(80, buildState.budget * 0.10);
-    var effectiveBudget = Math.min(remaining, maxRamPrice);
+    // Smart DDR type inference: specs.ram_type > board name > socket > default
+    var ramType = (mobo.specs && mobo.specs.ram_type) ? mobo.specs.ram_type : null;
+    if (!ramType) {
+        var boardName = (mobo.name || "").toUpperCase();
+        var cpuSocket = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.socket) || "";
+        if (boardName.indexOf("DDR4") >= 0 || boardName.indexOf("D4") >= 0) {
+            ramType = "DDR4";
+        } else if (boardName.indexOf("DDR5") >= 0 || boardName.indexOf("D5") >= 0) {
+            ramType = "DDR5";
+        } else if (cpuSocket === "AM5" || cpuSocket === "LGA1851") {
+            ramType = "DDR5"; // AM5 and LGA1851 are DDR5-only platforms
+        } else if (cpuSocket === "AM4" || cpuSocket === "LGA1200") {
+            ramType = "DDR4"; // AM4 and LGA1200 are DDR4-only platforms
+        } else if (cpuSocket === "LGA1700") {
+            // LGA1700: DDR4 boards always say "DDR4" in name. If it doesn't, it's DDR5.
+            ramType = "DDR5";
+        } else {
+            ramType = "DDR4"; // safe default for older platforms
+        }
+    }
+    var minRam = buildState.params.minRamGb;
+    // RAM cap: profile max (gaming=32GB) + mobo physical max
+    var profileMaxRam = buildState.params.maxRamGb || 64;
+    var moboMaxRam = (mobo.specs && mobo.specs.max_ram) ? mobo.specs.max_ram : 128;
+    var maxRamGb = Math.min(profileMaxRam, moboMaxRam);
 
-    print("");
-    print("  ✓ Motherboard: " + mobo.name + "  (" + formatPrice(mobo.price) + ")");
-    print("    RAM Type: " + ramType + "   |   Min " + minRam + "GB   |   Remaining: " + formatPrice(remaining));
-    print("");
-    print("  STEP 3/8 ─ Choose RAM  (" + ramType + ", min " + minRam + "GB, max rec. " + formatPrice(effectiveBudget) + ")");
-    print("  ─────────────────────────────────────────");
+    // Build-tier quality floor: high-budget builds get quality RAM
+    var ramMinTier = Math.max(1, (buildState.buildTier || 1) - 1);
+    var ramTierFloor = tierToFloor(ramMinTier, buildState.tiers.RAM);
 
-    // Section 4: find() with filter, sort, limit
-    var ramResults = db.components.find({
+    print("\n  \u2713 Mobo: " + mobo.name + " (" + formatPrice(mobo.price) + ")");
+    print("  \u2139 RAM cap: profile " + profileMaxRam + "GB, mobo " + moboMaxRam + "GB \u2192 max " + maxRamGb + "GB");
+    if (ramTierFloor > 0) {
+        print("  \u2139 Build Quality: Tier " + TIER_NAMES[buildState.buildTier] + " build \u2192 RAM min " + formatPrice(ramTierFloor));
+    }
+    print("  STEP 3/8 \u2014 RAM  (" + ramType + ", " + minRam + "\u2013" + maxRamGb + "GB" +
+        ", max " + formatPrice(maxPrice) + ")");
+
+    var results = db.components.find({
         type: "RAM",
         "specs.generation": ramType,
-        "specs.capacity_gb": { $gte: minRam },
-        price: { $type: "number", $lte: effectiveBudget }
-    }).sort({ price: -1 }).limit(15).toArray();
+        "specs.capacity_gb": { $gte: minRam, $lte: maxRamGb },
+        // Filter: min speed 3000MHz DDR4 / 4800MHz DDR5 — excludes slow server surplus
+        "specs.speed_mhz": { $gte: (ramType === "DDR5") ? 4800 : 3000 },
+        price: { $type: "number", $gte: ramTierFloor, $lte: maxPrice }
+    }).sort({ price: 1 }).limit(30).toArray();
 
-    // Fallback 1: Try full remaining budget
-    if (ramResults.length === 0) {
-        ramResults = db.components.find({
-            type: "RAM",
-            "specs.generation": ramType,
-            "specs.capacity_gb": { $gte: minRam },
-            price: { $type: "number", $lte: remaining }
-        }).sort({ price: 1 }).limit(10).toArray();
+    // Section 3: JS filter — exclude ECC/Registered server RAM (won't boot on consumer boards)
+    results = results.filter(function (r) {
+        var n = (r.name || "").toUpperCase();
+        return n.indexOf("ECC") < 0 && n.indexOf("RDIMM") < 0 && n.indexOf("LRDIMM") < 0
+            && n.indexOf("REG ") < 0 && n.indexOf("REGISTERED") < 0;
+    }).slice(0, 15);
+
+    // Fallback: any consumer RAM of correct type (drop speed requirement)
+    if (results.length === 0) {
+        results = db.components.find({
+            type: "RAM", "specs.generation": ramType,
+            price: { $type: "number" }
+        }).sort({ price: 1 }).limit(30).toArray().filter(function (r) {
+            var n = (r.name || "").toUpperCase();
+            return n.indexOf("ECC") < 0 && n.indexOf("RDIMM") < 0 && n.indexOf("LRDIMM") < 0;
+        }).slice(0, 10);
     }
 
-    // Fallback 2: Show over-budget options
-    if (ramResults.length === 0) {
-        print("  ⚠  Budget exhausted! Showing over-budget RAM:");
-        ramResults = db.components.find({
-            type: "RAM",
-            "specs.generation": ramType,
-            "specs.capacity_gb": { $gte: minRam }
-        }).sort({ price: 1 }).limit(5).toArray();
-    }
-
-    buildState.lastResults = ramResults;
-
-    printComponentList(ramResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.capacity_gb", label: "Size", width: 8, suffix: "GB" },
         { key: "specs.speed_mhz", label: "Speed", width: 9, suffix: "MHz" },
         { key: "specs.generation", label: "Gen", width: 6 }
     ]);
-
-    print("  → pick(<#>) to select your RAM.");
-    return ramResults.length + " RAM kits found";
+    print("  → pick(<#>)");
+    return results.length + " RAM kits found";
 }
 
 
 // ============================================================
 // Step 4: GPU Selection
-// stepGPU(ramIndex)
-//
 // Section 4: find().sort().limit() — best score in budget
 // ============================================================
 
 function stepGPU(ramIndex) {
-    if (buildState.step < 3) {
-        print("  ERROR: Run stepRAM() first!");
-        return;
+    var ram = validateAndSave(ramIndex, "ram", 4);
+    if (!ram) return;
+
+    var remaining = buildState.budget - buildState.spent;
+    var reserve = futureReserve(["Storage", "CPU Cooler", "Power Supply", "Case"]);
+    var available = remaining - reserve;
+    // Surplus-aware GPU cap: if CPU+Mobo+RAM came in under budget, GPU absorbs 70% of savings
+    // The other 30% stays as safety buffer for Storage/PSU/Case ("Surplus Tax")
+    var expectedPriorSpend = buildState.budget * (
+        buildState.params.cpuCap + buildState.params.moboCap + buildState.params.ramCap);
+    var rawSurplus = Math.max(0, Math.round(expectedPriorSpend - buildState.spent));
+    var surplus = Math.round(rawSurplus * 0.70);
+    var baseCap = Math.round(buildState.budget * buildState.params.gpuCap);
+    var dynamicCap = baseCap + surplus;
+    var maxPrice = Math.min(available, dynamicCap);
+    if (rawSurplus > 0) {
+        print("  \u2139 Surplus detected: prior steps saved $" + rawSurplus +
+            " (70% \u2192 GPU, 30% \u2192 reserve) \u2192 GPU cap: " + formatPrice(baseCap) + " \u2192 " + formatPrice(dynamicCap));
     }
-    if (ramIndex < 1 || ramIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
 
-    // Save RAM selection
-    var ram = buildState.lastResults[ramIndex - 1];
-    buildState.selections.ram = ram;
-    buildState.spent += ram.price;
-    buildState.step = 4;
+    // Relevance filter: score >= 1000 blocks ancient cards (GT 730, FirePro 2014)
+    var gpuMinScore = 1000;
 
-    // Smart reserve: Cooler (TDP-aware) + PSU ($35) + Storage ($20) + Case ($35)
-    var cpuTdp = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.tdp)
-        ? buildState.selections.cpu.specs.tdp : 65;
-    var coolerReserve = getCoolerReserve(cpuTdp);
-    var accessoryReserve = coolerReserve + 35 + 20 + 35; // cooler + PSU + storage + case
-    var gpuBudget = buildState.budget - buildState.spent - accessoryReserve;
+    print("\n  ✓ RAM: " + ram.name + " (" + formatPrice(ram.price) + ")");
+    print("  ℹ Relevance filter: blocking GPUs with score < " + gpuMinScore + " (pre-2018)");
+    print("  STEP 4/8 — GPU  (max " + formatPrice(maxPrice) + ", sorted by score)");
 
-    print("");
-    print("  ✓ RAM: " + ram.name + "  (" + formatPrice(ram.price) + ")");
-    print("    Spent: " + formatPrice(buildState.spent) +
-        "   |   Remaining: " + formatPrice(buildState.budget - buildState.spent));
-    print("    Reserving ~" + formatPrice(accessoryReserve) +
-        " for accessories (cooler " + formatPrice(coolerReserve) + " for " + cpuTdp + "W CPU)");
-    print("");
-    print("  STEP 4/8 ─ Choose a GPU  (max ~" + formatPrice(gpuBudget) + ")");
-    print("  ─────────────────────────────────────────");
-
-    // Section 4: find() GPUs sorted by score desc (better performance first)
-    // We prioritize Score over Price for GPUs, but keep within budget
-    var gpuResults = db.components.find({
+    var results = db.components.find({
         type: "GPU",
-        price: { $type: "number", $lte: gpuBudget },
-        "specs.score": { $type: "number" }
+        price: { $type: "number", $lte: maxPrice },
+        "specs.score": { $type: "number", $gte: gpuMinScore }
     }).sort({ "specs.score": -1 }).limit(15).toArray();
 
-    // Fallback: If no GPUs in budget, show over-budget options (cheapest first)
-    if (gpuResults.length === 0) {
-        print("  ⚠  No GPUs in budget. Showing cheapest available (OVER BUDGET):");
-        gpuResults = db.components.find({
+    // Fallback 1: drop score minimum but keep budget
+    if (results.length === 0) {
+        print("  ⚠ No modern GPUs in budget — showing all available:");
+        results = db.components.find({
             type: "GPU",
-            price: { $type: "number" },
+            price: { $type: "number", $lte: maxPrice },
             "specs.score": { $type: "number" }
+        }).sort({ "specs.score": -1 }).limit(15).toArray();
+    }
+
+    // Fallback 2: cheapest GPUs (over budget)
+    if (results.length === 0) {
+        print("  ⚠ No GPUs in budget — showing cheapest:");
+        results = db.components.find({
+            type: "GPU", price: { $type: "number" }
         }).sort({ price: 1 }).limit(10).toArray();
     }
 
-    buildState.lastResults = gpuResults;
-
-    printComponentList(gpuResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.vram", label: "VRAM", width: 7, suffix: "GB" },
         { key: "specs.length_mm", label: "Length", width: 8, suffix: "mm" },
         { key: "specs.score", label: "Score", width: 8 }
     ]);
-
-    print("  → pick(<#>) to select your GPU.");
-    return gpuResults.length + " GPUs found";
+    print("  → pick(<#>)");
+    return results.length + " GPUs found";
 }
 
 
 // ============================================================
 // Step 5: Storage Selection
-// stepStorage(gpuIndex)
-//
-// Smart: prefers SSDs/NVMe, limits capacity to usage-appropriate
-// sizes (gaming ≤ 4TB, budget ≤ 2TB, workstation ≤ 16TB)
 // Section 4: find().sort().limit()
 // ============================================================
 
 function stepStorage(gpuIndex) {
-    if (buildState.step < 4) {
-        print("  ERROR: Run stepGPU() first!");
-        return;
-    }
-    if (gpuIndex < 1 || gpuIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
-
-    // Save GPU selection
-    var gpu = buildState.lastResults[gpuIndex - 1];
-    buildState.selections.gpu = gpu;
-    buildState.spent += gpu.price;
-    buildState.step = 5;
+    var gpu = validateAndSave(gpuIndex, "gpu", 5);
+    if (!gpu) return;
 
     var remaining = buildState.budget - buildState.spent;
-    var maxCapacity = buildState.params.maxStorageGb;
+    var reserve = futureReserve(["CPU Cooler", "Power Supply", "Case"]);
+    // Dynamic cap: use higher of (budget*cap) or (35% of available)
+    var available = remaining - reserve;
+    var maxPrice = Math.min(available, Math.max(
+        Math.round(buildState.budget * buildState.params.storageCap),
+        Math.round(available * 0.35)
+    ));
 
-    print("");
-    print("  ✓ GPU: " + gpu.name + "  (" + formatPrice(gpu.price) + ")");
-    print("    Remaining: " + formatPrice(remaining));
-    print("");
-    print("  STEP 5/8 ─ Choose Storage  (up to " + maxCapacity + "GB, SSDs first)");
-    print("  ─────────────────────────────────────────");
+    // Build-tier quality floor for storage
+    var storageTierFloor = tierToFloor(Math.max(1, (buildState.buildTier || 1) - 1), buildState.tiers.Storage);
 
-    // Smart storage: show SSDs/NVMe first, cap capacity by usage type
-    var ssdResults = db.components.find({
+    print("\n  \u2713 GPU: " + gpu.name + " (" + formatPrice(gpu.price) + ")");
+    if (storageTierFloor > 0) {
+        print("  \u2139 Build Quality: Tier " + TIER_NAMES[buildState.buildTier] + " build \u2192 Storage min " + formatPrice(storageTierFloor));
+    }
+    print("  STEP 5/8 \u2014 Storage  (max " + formatPrice(maxPrice) + ")");
+
+    // SSD only \u2014 HDDs are unacceptable as primary storage
+    var minStorage = buildState.params.minStorageGb || 240;
+
+    var results = db.components.find({
         type: "Storage",
-        price: { $type: "number", $lte: remaining },
-        "specs.capacity_gb": { $lte: maxCapacity },
+        price: { $type: "number", $gte: storageTierFloor, $lte: maxPrice },
+        "specs.capacity_gb": { $gte: minStorage, $lte: buildState.params.maxStorageGb },
         "specs.storage_type": { $in: ["SSD", "Hybrid", "260 SSD", "M.2", "NVMe"] }
-    }).sort({ price: -1 }).limit(10).toArray();
+    }).sort({ "specs.capacity_gb": -1, price: 1 }).limit(15).toArray();
 
-    // Also show some HDD options
-    var hddResults = db.components.find({
-        type: "Storage",
-        price: { $type: "number", $lte: remaining },
-        "specs.capacity_gb": { $lte: maxCapacity },
-        "specs.storage_type": { $nin: ["SSD", "Hybrid", "260 SSD", "M.2", "NVMe"] }
-    }).sort({ price: -1 }).limit(5).toArray();
-
-    var storageResults = ssdResults.concat(hddResults);
-
-    // Fallback: if no SSDs found, just show any storage
-    if (storageResults.length === 0) {
-        storageResults = db.components.find({
-            type: "Storage",
-            price: { $type: "number", $lte: remaining },
-            "specs.capacity_gb": { $lte: maxCapacity }
-        }).sort({ price: -1 }).limit(15).toArray();
+    // Fallback: any SSD (drop capacity minimum)
+    if (results.length === 0) {
+        results = db.components.find({
+            type: "Storage", price: { $type: "number", $lte: maxPrice },
+            "specs.storage_type": { $in: ["SSD", "Hybrid", "260 SSD", "M.2", "NVMe"] }
+        }).sort({ "specs.capacity_gb": -1, price: 1 }).limit(10).toArray();
     }
 
-    buildState.lastResults = storageResults;
+    // Last resort: any storage if no SSDs at all
+    if (results.length === 0) {
+        results = db.components.find({
+            type: "Storage", price: { $type: "number", $lte: maxPrice }
+        }).sort({ price: 1 }).limit(10).toArray();
+    }
 
-    printComponentList(storageResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.capacity_gb", label: "Size", width: 9, suffix: "GB" },
-        { key: "specs.storage_type", label: "Type", width: 9 },
-        { key: "specs.interface", label: "Interface", width: 18 }
+        { key: "specs.storage_type", label: "Type", width: 9 }
     ]);
-
-    print("  → pick(<#>) to select your Storage.");
-    return storageResults.length + " storage drives found";
+    print("  → pick(<#>)");
+    return results.length + " drives found";
 }
 
 
 // ============================================================
 // Step 6: CPU Cooler Selection
-// stepCooler(storageIndex)
-//
-// Smart: TDP-aware minimum price AND type filtering
-//   TDP > 125W → liquid coolers recommended, min $60
-//   TDP > 95W  → solid tower cooler, min $35
-//   TDP > 65W  → basic tower, min $20
-//   TDP ≤ 65W  → anything works
-// Section 4: find().sort().limit()
+// Section 4: find().sort().limit() — TDP-aware minimum
 // ============================================================
 
 function stepCooler(storageIndex) {
-    if (buildState.step < 5) {
-        print("  ERROR: Run stepStorage() first!");
-        return;
-    }
-    if (storageIndex < 1 || storageIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
+    var storage = validateAndSave(storageIndex, "storage", 6);
+    if (!storage) return;
 
-    // Save Storage selection
-    var storage = buildState.lastResults[storageIndex - 1];
-    buildState.selections.storage = storage;
-    buildState.spent += storage.price;
-    buildState.step = 6;
-
-    var cpuTdp = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.tdp)
-        ? buildState.selections.cpu.specs.tdp : 65;
     var remaining = buildState.budget - buildState.spent;
-    var isHighTdp = cpuTdp > 125;
-    var isMidTdp = cpuTdp > 95;
-    var minCoolerPrice = getCoolerReserve(cpuTdp);
+    var reserve = futureReserve(["Power Supply", "Case"]);
+    var maxPrice = remaining - reserve;
+    // Cap: cooler is support — never more than coolerCap% of budget
+    var coolerCap = buildState.params.coolerCap || 0.08;
+    maxPrice = Math.min(maxPrice, Math.round(buildState.budget * coolerCap));
 
-    print("");
-    print("  ✓ Storage: " + storage.name + "  (" + formatPrice(storage.price) + ")");
-    print("    Remaining: " + formatPrice(remaining));
-    print("    CPU TDP: " + cpuTdp + "W → Minimum cooler: " + formatPrice(minCoolerPrice));
-    if (isHighTdp) {
-        print("    ★ HIGH TDP! Liquid cooling strongly recommended.");
+    var cpuTdp = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.tdp) || 65;
+    var cpuScore = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.score) || 0;
+    var minPrice = getCoolerReserve(cpuTdp, cpuScore);
+    // Build-tier quality floor: high-budget builds get quality coolers
+    var coolerTierFloor = tierToFloor(Math.max(1, (buildState.buildTier || 1) - 1), buildState.tiers["CPU Cooler"]);
+    minPrice = Math.max(minPrice, coolerTierFloor);
+    // Cooler size limit: Micro ATX/Mini ITX cases support max 240mm radiator
+    var moboForm = (buildState.selections.motherboard.specs && buildState.selections.motherboard.specs.form_factor) || "ATX";
+    var mf = moboForm.toLowerCase();
+    var smallCase = (mf.indexOf("micro") >= 0 || mf.indexOf("mini") >= 0);
+
+    print("\n  ✓ Storage: " + storage.name + " (" + formatPrice(storage.price) + ")");
+    print("  STEP 6/8 — Cooler  (min " + formatPrice(minPrice) + ", max " + formatPrice(maxPrice) + " for " + cpuTdp + "W" +
+        (cpuScore > 1500 ? " ★ High-perf CPU" : "") +
+        (smallCase ? " | max 240mm radiator" : "") + ")");
+
+    var results = db.components.find({
+        type: "CPU Cooler",
+        price: { $type: "number", $gte: minPrice, $lte: maxPrice }
+    }).sort({ price: 1 }).limit(30).toArray();
+
+    // Compatibility: filter oversized liquid coolers for small cases
+    // MicroATX/Mini ITX cases support max 240mm radiator — block 280/360/420mm
+    if (smallCase) {
+        results = results.filter(function (c) {
+            var n = (c.name || "").toLowerCase();
+            var isLiquid = (n.indexOf("liquid") >= 0 || n.indexOf("aio") >= 0 ||
+                (c.specs && c.specs.kind && c.specs.kind.toLowerCase().indexOf("liquid") >= 0));
+            if (!isLiquid) return true; // air coolers are fine
+            // Block radiators > 240mm (280, 360, 420)
+            if (n.indexOf("280") >= 0 || n.indexOf("360") >= 0 || n.indexOf("420") >= 0) {
+                return false;
+            }
+            return true;
+        });
     }
-    print("");
-    print("  STEP 6/8 ─ Choose a CPU Cooler  (min " + formatPrice(minCoolerPrice) + " for " + cpuTdp + "W CPU)");
-    print("  ─────────────────────────────────────────");
 
-    var coolerResults;
-    if (isHighTdp) {
-        // Show liquid coolers first for high-TDP
-        var liquidCoolers = db.components.find({
-            type: "CPU Cooler",
-            price: { $type: "number", $gte: minCoolerPrice, $lte: remaining },
-            "specs.kind": "Liquid"
-        }).sort({ price: -1 }).limit(10).toArray();
-
-        // Also show top air coolers
-        var airCoolers = db.components.find({
-            type: "CPU Cooler",
-            price: { $type: "number", $gte: minCoolerPrice, $lte: remaining },
-            "specs.kind": "Air"
-        }).sort({ price: -1 }).limit(5).toArray();
-
-        coolerResults = liquidCoolers.concat(airCoolers);
-    } else {
-        // Normal: show all coolers above minimum price
-        coolerResults = db.components.find({
-            type: "CPU Cooler",
-            price: { $type: "number", $gte: minCoolerPrice, $lte: remaining }
-        }).sort({ price: -1 }).limit(15).toArray();
+    // Quality filter: block low-profile coolers for high-TDP CPUs
+    // Low-profile coolers (e.g. NT06-PRO, Silvretta) can't handle 125W+ CPUs
+    var effectiveTdp = cpuTdp;
+    if (cpuScore > 1500 && effectiveTdp < 150) effectiveTdp = 150;
+    if (effectiveTdp >= 125) {
+        results = results.filter(function (c) {
+            var n = (c.name || "").toLowerCase();
+            var kind = (c.specs && c.specs.kind) ? c.specs.kind.toLowerCase() : "";
+            // Block low-profile / slim / HTPC coolers for demanding CPUs
+            if (kind.indexOf("low") >= 0 || kind.indexOf("slim") >= 0) return false;
+            if (n.indexOf("low profile") >= 0 || n.indexOf("low-profile") >= 0 ||
+                n.indexOf("slim") >= 0 || n.indexOf("silvretta") >= 0 ||
+                n.indexOf("nt06") >= 0 || n.indexOf("axp-") >= 0 ||
+                n.indexOf("c7 ") >= 0 || n.indexOf("is-") >= 0) return false;
+            return true;
+        });
     }
+    results = results.slice(0, 15);
 
-    // Fallback: if nothing found (e.g. over budget), show ANY compatible cooler
-    if (coolerResults.length === 0) {
-        print("  ⚠  No coolers in budget. Showing compatible options (OVER BUDGET):");
-        coolerResults = db.components.find({
-            type: "CPU Cooler",
-            price: { $type: "number", $gte: minCoolerPrice }
+    // Fallback: still enforce minPrice — never show coolers that can't handle the CPU
+    if (results.length === 0) {
+        print("  ⚠ No coolers in budget — showing cheapest adequate:");
+        results = db.components.find({
+            type: "CPU Cooler", price: { $type: "number", $gte: minPrice }
         }).sort({ price: 1 }).limit(10).toArray();
     }
 
-    buildState.lastResults = coolerResults;
-
-    printComponentList(coolerResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.kind", label: "Type", width: 8 },
-        { key: "specs.rpm_max", label: "RPM", width: 7 },
         { key: "specs.noise_level_db", label: "dB", width: 7 }
     ]);
-
-    print("  → pick(<#>) to select your Cooler.");
-    return coolerResults.length + " coolers found";
+    print("  → pick(<#>)");
+    return results.length + " coolers found";
 }
 
 
 // ============================================================
 // Step 7: PSU Selection
-// stepPSU(coolerIndex)
-//
-// Calculates total wattage requirement, filters by wattage
+// Section 3: calculateRequiredWatts()
 // Section 4: find().sort().limit()
 // ============================================================
 
 function stepPSU(coolerIndex) {
-    if (buildState.step < 6) {
-        print("  ERROR: Run stepCooler() first!");
-        return;
-    }
-    if (coolerIndex < 1 || coolerIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
+    var cooler = validateAndSave(coolerIndex, "cooler", 7);
+    if (!cooler) return;
 
-    // Save Cooler selection
-    var cooler = buildState.lastResults[coolerIndex - 1];
-    buildState.selections.cooler = cooler;
-    buildState.spent += cooler.price;
-    buildState.step = 7;
-
-    // Section 3: calculateRequiredWatts (JS function)
-    var cpuTdp = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.tdp)
-        ? buildState.selections.cpu.specs.tdp : 65;
-    var gpuVram = (buildState.selections.gpu.specs && buildState.selections.gpu.specs.vram)
-        ? buildState.selections.gpu.specs.vram : 8;
-    var requiredWatts = calculateRequiredWatts(cpuTdp, gpuVram);
     var remaining = buildState.budget - buildState.spent;
+    var reserve = futureReserve(["Case"]);
+    var maxPrice = remaining - reserve;
+    var cpuTdp = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.tdp) || 65;
+    var cpuScore = (buildState.selections.cpu.specs && buildState.selections.cpu.specs.score) || 0;
+    var gpuVram = (buildState.selections.gpu.specs && buildState.selections.gpu.specs.vram) || 8;
+    var requiredWatts = calculateRequiredWatts(cpuTdp, gpuVram, cpuScore);
 
-    print("");
-    print("  ✓ Cooler: " + cooler.name + "  (" + formatPrice(cooler.price) + ")");
-    print("    Remaining: " + formatPrice(remaining));
-    print("    Required: " + requiredWatts + "W  (CPU " + cpuTdp + "W + GPU " + gpuVram + "GB×20W + 100W margin)");
-    print("");
-    print("  STEP 7/8 ─ Choose a PSU  (minimum " + requiredWatts + "W)");
-    print("  ─────────────────────────────────────────");
+    // Tier enforcement: PSU must be within ±1 tier of GPU
+    var gpuPrice = (buildState.selections.gpu && buildState.selections.gpu.price) || 0;
+    var gpuTier = priceTier(gpuPrice, buildState.tiers.GPU);
+    var psuTierMin = Math.max(1, gpuTier - 1);
+    var psuBounds = buildState.tiers.PSU;
+    var psuTierFloor = tierToFloor(psuTierMin, psuBounds);
+    // Also enforce build-tier quality floor
+    psuTierFloor = Math.max(psuTierFloor, tierToFloor(Math.max(1, (buildState.buildTier || 1) - 1), psuBounds));
+    var minPsuPrice = psuTierFloor;
 
-    // Section 4: find() PSUs that meet wattage requirement
-    var psuResults = db.components.find({
+    print("\n  ✓ Cooler: " + cooler.name + " (" + formatPrice(cooler.price) + ")");
+    print("  ℹ Smart Logic: GPU is Tier " + TIER_NAMES[gpuTier] +
+        ". PSU must be Tier " + TIER_NAMES[psuTierMin] + "+...");
+    print("  STEP 7/8 — PSU  (min " + requiredWatts + "W" +
+        (minPsuPrice > 0 ? ", min " + formatPrice(minPsuPrice) + " (Tier match)" : "") +
+        ", max " + formatPrice(maxPrice) + ")");
+
+    var results = db.components.find({
         type: "Power Supply",
-        price: { $type: "number", $lte: remaining },
+        price: { $type: "number", $gte: minPsuPrice, $lte: maxPrice },
         "specs.wattage": { $gte: requiredWatts }
-    }).sort({ price: -1 }).limit(15).toArray();
+    }).sort({ price: 1 }).limit(20).toArray();
 
-    // Fallback: none in budget, show cheapest with enough wattage
-    if (psuResults.length === 0) {
-        print("  ⚠  No PSUs in budget at " + requiredWatts + "W. Showing cheapest available:");
-        psuResults = db.components.find({
+    // Tier fallback: if tier filter is too strict, drop it
+    if (results.length === 0 && minPsuPrice > 0) {
+        print("  ⚠ Budget too low for Tier " + TIER_NAMES[psuTierMin] + " PSU — reverting to basic compatibility...");
+        results = db.components.find({
             type: "Power Supply",
-            price: { $type: "number" },
+            price: { $type: "number", $lte: maxPrice },
+            "specs.wattage": { $gte: requiredWatts }
+        }).sort({ price: 1 }).limit(20).toArray();
+    }
+
+    if (results.length === 0) {
+        print("  ⚠ No PSU at " + requiredWatts + "W in budget — cheapest:");
+        results = db.components.find({
+            type: "Power Supply", price: { $type: "number" },
             "specs.wattage": { $gte: requiredWatts }
         }).sort({ price: 1 }).limit(10).toArray();
     }
 
-    buildState.lastResults = psuResults;
-
-    printComponentList(psuResults, [
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.wattage", label: "Watts", width: 8, suffix: "W" },
-        { key: "specs.efficiency", label: "Rating", width: 12 },
-        { key: "specs.modular", label: "Modular", width: 9 }
+        { key: "specs.efficiency", label: "Rating", width: 12 }
     ]);
-
-    print("  → pick(<#>) to select your PSU.");
-    return psuResults.length + " PSUs found";
+    print("  → pick(<#>)");
+    return results.length + " PSUs found";
 }
 
 
 // ============================================================
 // Step 8: Case Selection
-// stepCase(psuIndex)
-//
-// Section 6: aggregate() with $match + $expr for
-//   field-to-field comparison (max_gpu_length >= GPU length)
+// Section 6: aggregate() + $project with $subtract
 // ============================================================
 
 function stepCase(psuIndex) {
-    if (buildState.step < 7) {
-        print("  ERROR: Run stepPSU() first!");
-        return;
-    }
-    if (psuIndex < 1 || psuIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
+    var psu = validateAndSave(psuIndex, "psu", 8);
+    if (!psu) return;
 
-    // Save PSU selection
-    var psu = buildState.lastResults[psuIndex - 1];
-    buildState.selections.psu = psu;
-    buildState.spent += psu.price;
-    buildState.step = 8;
-
-    var gpuLength = (buildState.selections.gpu.specs && buildState.selections.gpu.specs.length_mm)
-        ? buildState.selections.gpu.specs.length_mm : 0;
     var remaining = buildState.budget - buildState.spent;
+    var gpuLength = (buildState.selections.gpu.specs && buildState.selections.gpu.specs.length_mm) || 0;
+    var moboForm = (buildState.selections.motherboard.specs && buildState.selections.motherboard.specs.form_factor) || "ATX";
 
-    print("");
-    print("  ✓ PSU: " + psu.name + "  (" + formatPrice(psu.price) + ")");
-    print("    Remaining: " + formatPrice(remaining));
-    print("    GPU length: " + gpuLength + "mm");
-    print("");
-    print("  STEP 8/8 ─ Choose a Case  (fits " + gpuLength + "mm GPU)");
-    print("  ─────────────────────────────────────────");
+    print("\n  ✓ PSU: " + psu.name + " (" + formatPrice(psu.price) + ")");
+    print("  STEP 8/8 — Case  (fits " + gpuLength + "mm GPU + " + moboForm + " mobo, max " + formatPrice(remaining) + ")");
 
-    // Section 6: Aggregation with calculated clearance field
-    var caseResults = db.components.aggregate([
+    // Section 6: Aggregation with $subtract for GPU clearance
+    var results = db.components.aggregate([
         {
             $match: {
                 type: "Case",
-                price: { $type: "number", $lte: remaining },
+                price: { $type: "number", $gte: tierToFloor(Math.max(1, (buildState.buildTier || 1) - 1), buildState.tiers.Case), $lte: remaining },
                 "specs.max_gpu_length": { $gte: gpuLength }
             }
         },
         {
             $project: {
-                name: 1,
-                price: 1,
-                manufacturer: 1,
+                name: 1, price: 1,
                 "specs.form_factor": 1,
                 "specs.max_gpu_length": 1,
-                // Section 6: $subtract — calculate how much room is left
                 gpu_clearance: { $subtract: ["$specs.max_gpu_length", gpuLength] }
             }
         },
-        { $sort: { price: -1 } },
-        { $limit: 15 }
+        { $sort: { price: 1 } },
+        { $limit: 30 }
     ]).toArray();
 
-    // Fallback
-    if (caseResults.length === 0) {
-        print("  ⚠  No cases fit GPU in budget. Showing cheapest:");
-        caseResults = db.components.find({
-            type: "Case",
-            price: { $type: "number" }
-        }).sort({ price: 1 }).limit(10).toArray();
+    // Section 3: Filter by form factor compatibility (JS function)
+    // מסנן מארזים שלא מתאימים ללוח-האם שנבחר
+    results = results.filter(function (c) {
+        var cf = (c.specs && c.specs.form_factor) || "";
+        return caseSupportsMotherboard(cf, moboForm);
+    });
+
+    if (results.length === 0) {
+        // Fallback 1: over-budget but MUST fit GPU + mobo form factor
+        results = db.components.find({
+            type: "Case", price: { $type: "number" },
+            "specs.max_gpu_length": { $gte: gpuLength }
+        }).sort({ price: 1 }).limit(30).toArray().filter(function (c) {
+            var cf = (c.specs && c.specs.form_factor) || "";
+            return caseSupportsMotherboard(cf, moboForm);
+        });
     }
 
-    buildState.lastResults = caseResults;
+    if (results.length === 0 && gpuLength > 0) {
+        // Fallback 2: relax GPU length by 15mm (tight fit warning)
+        // 353mm GPU in 350mm case = 3mm tight, usually still works
+        print("  ⚠ No exact fit — showing cases within 15mm tolerance:");
+        results = db.components.find({
+            type: "Case", price: { $type: "number" },
+            "specs.max_gpu_length": { $gte: gpuLength - 15 }
+        }).sort({ "specs.max_gpu_length": -1, price: 1 }).limit(30).toArray().filter(function (c) {
+            var cf = (c.specs && c.specs.form_factor) || "";
+            return caseSupportsMotherboard(cf, moboForm);
+        });
+    }
 
-    printComponentList(caseResults, [
+    if (results.length === 0) {
+        // Fallback 3: any case with best GPU clearance, compatible form factor
+        print("  ⚠ No cases near GPU length — showing best available:");
+        results = db.components.find({
+            type: "Case", price: { $type: "number" },
+            "specs.max_gpu_length": { $type: "number" }
+        }).sort({ "specs.max_gpu_length": -1 }).limit(40).toArray().filter(function (c) {
+            var cf = (c.specs && c.specs.form_factor) || "";
+            return caseSupportsMotherboard(cf, moboForm);
+        }).slice(0, 15);
+    }
+
+    buildState.lastResults = results;
+    printComponentList(results, [
         { key: "specs.form_factor", label: "Form", width: 22 },
         { key: "specs.max_gpu_length", label: "MaxGPU", width: 9, suffix: "mm" },
         { key: "gpu_clearance", label: "Clear.", width: 9, suffix: "mm" }
     ]);
-
-    print("  → pick(<#>) to finalize your build!");
-    return caseResults.length + " cases found";
+    print("  → pick(<#>) to finalize!");
+    return results.length + " cases found";
 }
 
 
 // ============================================================
 // Step 9: Finalize Build
-// finalizeBuild(caseIndex)
-//
-// Saves the complete build to recommended_combos collection.
-// Section 3: calculateWeightedScore (JS function)
+// Section 3: calculateWeightedScore()
 // Section 4: insertOne()
+// Section 6: aggregate with $add + $out
 // ============================================================
 
 function finalizeBuild(caseIndex) {
-    if (buildState.step < 8) {
-        print("  ERROR: Run stepCase() first!");
-        return;
-    }
-    if (caseIndex < 1 || caseIndex > buildState.lastResults.length) {
-        print("  ERROR: Invalid selection. Pick 1–" + buildState.lastResults.length);
-        return;
-    }
+    var pcCase = validateAndSave(caseIndex, "pcCase", 9);
+    if (!pcCase) return;
 
-    // Save Case selection
-    var pcCase = buildState.lastResults[caseIndex - 1];
-    buildState.selections.pcCase = pcCase;
-    buildState.spent += pcCase.price;
-
-    // --- Calculate totals ---
     var sel = buildState.selections;
-    var totalPrice = sel.cpu.price + sel.motherboard.price + sel.ram.price +
-        sel.gpu.price + sel.storage.price + sel.cooler.price +
-        sel.psu.price + sel.pcCase.price;
-    totalPrice = Math.round(totalPrice * 100) / 100;
+    var totalPrice = Math.round((sel.cpu.price + sel.motherboard.price +
+        sel.ram.price + sel.gpu.price + sel.storage.price +
+        sel.cooler.price + sel.psu.price + sel.pcCase.price) * 100) / 100;
 
-    // Section 3: calculateWeightedScore (JS function)
-    var cpuScore = (sel.cpu.specs && sel.cpu.specs.score) ? sel.cpu.specs.score : 0;
-    var gpuScore = (sel.gpu.specs && sel.gpu.specs.score) ? sel.gpu.specs.score : 0;
-    var ramCapacity = (sel.ram.specs && sel.ram.specs.capacity_gb) ? sel.ram.specs.capacity_gb : 0;
+    // Section 3: calculateWeightedScore
+    var cpuScore = (sel.cpu.specs && sel.cpu.specs.score) || 0;
+    var gpuScore = (sel.gpu.specs && sel.gpu.specs.score) || 0;
+    var ramCap = (sel.ram.specs && sel.ram.specs.capacity_gb) || 0;
     var weightedScore = calculateWeightedScore(
-        cpuScore, gpuScore, ramCapacity, buildState.params.scoringWeights
+        cpuScore, gpuScore, ramCap, buildState.params.scoringWeights
     );
 
-    // Build the result document
     var completeBuild = {
         build_name: buildState.params.name + " Build — " + formatPrice(buildState.budget),
         usage_type: buildState.usage,
@@ -924,18 +1093,25 @@ function finalizeBuild(caseIndex) {
             psu: sel.psu.name,
             case_name: sel.pcCase.name
         },
+        price_breakdown: {
+            cpu: sel.cpu.price,
+            motherboard: sel.motherboard.price,
+            ram: sel.ram.price,
+            gpu: sel.gpu.price,
+            storage: sel.storage.price,
+            cooler: sel.cooler.price,
+            psu: sel.psu.price,
+            case_price: sel.pcCase.price
+        },
         compatibility_details: {
             cpu_socket: sel.cpu.specs.socket,
             motherboard_socket: sel.motherboard.specs.socket,
             ram_type_required: sel.motherboard.specs.ram_type,
             ram_type_selected: sel.ram.specs ? sel.ram.specs.generation : "unknown",
-            ram_capacity_gb: ramCapacity,
-            gpu_length_mm: (sel.gpu.specs && sel.gpu.specs.length_mm) ? sel.gpu.specs.length_mm : 0,
-            case_max_gpu_length_mm: (sel.pcCase.specs && sel.pcCase.specs.max_gpu_length) ? sel.pcCase.specs.max_gpu_length : 0,
-            required_watts: calculateRequiredWatts(
-                sel.cpu.specs.tdp || 65,
-                sel.gpu.specs.vram || 8
-            ),
+            ram_capacity_gb: ramCap,
+            gpu_length_mm: (sel.gpu.specs && sel.gpu.specs.length_mm) || 0,
+            case_max_gpu_length_mm: (sel.pcCase.specs && sel.pcCase.specs.max_gpu_length) || 0,
+            required_watts: calculateRequiredWatts(sel.cpu.specs.tdp || 65, sel.gpu.specs.vram || 8),
             psu_wattage: sel.psu.specs ? sel.psu.specs.wattage : 0
         },
         performance_metrics: {
@@ -947,70 +1123,85 @@ function finalizeBuild(caseIndex) {
         generated_at: new Date()
     };
 
-    // Budget check
-    var overBudget = totalPrice > buildState.budget;
-    var overflowPercent = Math.round(((totalPrice / buildState.budget) - 1) * 100);
-    var underBudget = buildState.budget - totalPrice;
-
-    // Section 4: insertOne — save to collection
+    // Section 4: insertOne
+    db.recommended_combos.drop();
     db.recommended_combos.insertOne(completeBuild);
 
-    // --- Pretty Print Final Build ---
+    // Section 6: $add + $out — verify total and save to completed_builds
+    // $add סוכם את כל מחירי הרכיבים, $out שומר לקולקציה נפרדת
+    db.recommended_combos.aggregate([
+        { $match: { build_method: "interactive" } },
+        {
+            $project: {
+                build_name: 1,
+                components: 1,
+                price_breakdown: 1,
+                performance_metrics: 1,
+                total_price: 1,
+                // Section 6: $add — sum all component prices
+                computed_total: {
+                    $add: [
+                        "$price_breakdown.cpu",
+                        "$price_breakdown.motherboard",
+                        "$price_breakdown.ram",
+                        "$price_breakdown.gpu",
+                        "$price_breakdown.storage",
+                        "$price_breakdown.cooler",
+                        "$price_breakdown.psu",
+                        "$price_breakdown.case_price"
+                    ]
+                },
+                generated_at: 1
+            }
+        },
+        // Section 6: $out — save to separate collection
+        { $out: "completed_builds" }
+    ]);
+
+    // --- Print Final Summary ---
+    var overBudget = totalPrice > buildState.budget;
+    var pct = Math.round(((totalPrice / buildState.budget) - 1) * 100);
+
     print("");
     print("  ╔════════════════════════════════════════════════════════════════╗");
     if (overBudget) {
-        print("  ║   BUILD COMPLETE   (" + overflowPercent + "% over budget)                        ║");
+        print("  ║   BUILD COMPLETE   (" + pct + "% over budget)                        ║");
     } else {
         print("  ║   BUILD COMPLETE   ✓                                         ║");
     }
     print("  ╠════════════════════════════════════════════════════════════════╣");
-    print("  ║                                                              ║");
-    print("  ║  " + padRight("CPU:          " + sel.cpu.name, 51) + padLeft(formatPrice(sel.cpu.price), 10) + "  ║");
-    print("  ║  " + padRight("Motherboard:  " + sel.motherboard.name, 51) + padLeft(formatPrice(sel.motherboard.price), 10) + "  ║");
-    print("  ║  " + padRight("RAM:          " + sel.ram.name, 51) + padLeft(formatPrice(sel.ram.price), 10) + "  ║");
-    print("  ║  " + padRight("GPU:          " + truncate(sel.gpu.name, 37), 51) + padLeft(formatPrice(sel.gpu.price), 10) + "  ║");
-    print("  ║  " + padRight("Storage:      " + sel.storage.name, 51) + padLeft(formatPrice(sel.storage.price), 10) + "  ║");
-    print("  ║  " + padRight("Cooler:       " + sel.cooler.name, 51) + padLeft(formatPrice(sel.cooler.price), 10) + "  ║");
-    print("  ║  " + padRight("PSU:          " + sel.psu.name, 51) + padLeft(formatPrice(sel.psu.price), 10) + "  ║");
-    print("  ║  " + padRight("Case:         " + sel.pcCase.name, 51) + padLeft(formatPrice(sel.pcCase.price), 10) + "  ║");
-    print("  ║                                                              ║");
+    print("  ║  " + padRight("CPU:     " + truncate(sel.cpu.name, 42), 51) + padLeft(formatPrice(sel.cpu.price), 10) + "  ║");
+    print("  ║  " + padRight("Mobo:    " + truncate(sel.motherboard.name, 42), 51) + padLeft(formatPrice(sel.motherboard.price), 10) + "  ║");
+    print("  ║  " + padRight("RAM:     " + truncate(sel.ram.name, 42), 51) + padLeft(formatPrice(sel.ram.price), 10) + "  ║");
+    print("  ║  " + padRight("GPU:     " + truncate(sel.gpu.name, 42), 51) + padLeft(formatPrice(sel.gpu.price), 10) + "  ║");
+    print("  ║  " + padRight("Storage: " + truncate(sel.storage.name, 42), 51) + padLeft(formatPrice(sel.storage.price), 10) + "  ║");
+    print("  ║  " + padRight("Cooler:  " + truncate(sel.cooler.name, 42), 51) + padLeft(formatPrice(sel.cooler.price), 10) + "  ║");
+    print("  ║  " + padRight("PSU:     " + truncate(sel.psu.name, 42), 51) + padLeft(formatPrice(sel.psu.price), 10) + "  ║");
+    print("  ║  " + padRight("Case:    " + truncate(sel.pcCase.name, 42), 51) + padLeft(formatPrice(sel.pcCase.price), 10) + "  ║");
     print("  ╠════════════════════════════════════════════════════════════════╣");
     print("  ║  " + padRight("TOTAL:", 51) + padLeft(formatPrice(totalPrice), 10) + "  ║");
     print("  ║  " + padRight("Budget:", 51) + padLeft(formatPrice(buildState.budget), 10) + "  ║");
-    if (overBudget) {
-        print("  ║  " + padRight("Over budget:", 51) + padLeft("+" + formatPrice(totalPrice - buildState.budget), 10) + "  ║");
-    } else {
-        print("  ║  " + padRight("Under budget:", 51) + padLeft(formatPrice(underBudget), 10) + "  ║");
-    }
-    print("  ║  " + padRight("Performance Score:", 51) + padLeft(String(weightedScore), 10) + "  ║");
-    print("  ║                                                              ║");
+    print("  ║  " + padRight("Score:", 51) + padLeft(String(weightedScore), 10) + "  ║");
     print("  ╚════════════════════════════════════════════════════════════════╝");
 
     if (overBudget) {
-        print("\n  ⚠  Total exceeds budget by " + overflowPercent + "%. Consider cheaper options.");
+        print("\n  ⚠ Over budget by " + pct + "%. Consider cheaper options.");
     }
+    print("\n  ✓ Saved to 'recommended_combos' + 'completed_builds' ($out)");
+    print("  → stepCPU(budget, 'usage') for a new build\n");
 
-    print("\n  ✓ Build saved to 'recommended_combos' collection.");
-    print("  ✓ Run  stepCPU(budget, 'usage')  to start a new build.\n");
-
-    // Reset for next build
     buildState.step = 0;
-
     return completeBuild;
 }
 
 
 // ============================================================
 // Pipeline #2 — Market Analysis (Section 6)
-// Demonstrates: $group, $avg, $min, $max, $sum, $sort
+// $match, $group ($sum, $avg, $min, $max), $project ($round, $multiply), $sort
 // ============================================================
 
 function section6_marketAnalysis() {
-    print("");
-    print("  ╔════════════════════════════════════════════════════╗");
-    print("  ║   Market Analysis — Component Statistics          ║");
-    print("  ╚════════════════════════════════════════════════════╝");
-    print("");
+    print("\n  ── Market Analysis ──");
 
     var results = db.components.aggregate([
         { $match: { price: { $type: "number", $gt: 0 } } },
@@ -1020,8 +1211,7 @@ function section6_marketAnalysis() {
                 count: { $sum: 1 },
                 avg_price: { $avg: "$price" },
                 min_price: { $min: "$price" },
-                max_price: { $max: "$price" },
-                total_value: { $sum: "$price" }
+                max_price: { $max: "$price" }
             }
         },
         {
@@ -1032,7 +1222,8 @@ function section6_marketAnalysis() {
                 avg_price: { $round: ["$avg_price", 2] },
                 min_price: 1,
                 max_price: 1,
-                total_value: { $round: ["$total_value", 2] }
+                // Section 6: $multiply — estimated total market value
+                est_market_value: { $round: [{ $multiply: ["$count", "$avg_price"] }, 2] }
             }
         },
         { $sort: { count: -1 } }
@@ -1052,22 +1243,17 @@ function section6_marketAnalysis() {
             padLeft(formatPrice(r.max_price), 10));
     }
     print("");
-
     return results;
 }
 
 
 // ============================================================
 // Pipeline #3 — Manufacturer Breakdown (Section 6)
-// Demonstrates: $group, $push, $first, $unwind
+// $match, $group ($sum, $push, $first), $sort, $limit
 // ============================================================
 
 function section6_manufacturerBreakdown() {
-    print("");
-    print("  ╔════════════════════════════════════════════════════╗");
-    print("  ║   Manufacturer Breakdown                          ║");
-    print("  ╚════════════════════════════════════════════════════╝");
-    print("");
+    print("\n  ── Manufacturer Breakdown ──");
 
     var results = db.components.aggregate([
         { $match: { manufacturer: { $exists: true, $ne: null } } },
@@ -1105,24 +1291,19 @@ function section6_manufacturerBreakdown() {
                 padLeft(String(m.categories[c].count), 4) + " items" +
                 padLeft("avg " + formatPrice(m.categories[c].avg_price), 14));
         }
-        print("");
     }
-
+    print("");
     return results;
 }
 
 
 // ============================================================
 // Pipeline #4 — High-Value Components (Section 6)
-// Demonstrates: $expr, $multiply, $divide, $gt (field comparison)
+// $match, $project ($divide, $round), $match ($expr), $sort, $limit
 // ============================================================
 
 function section6_highValueComponents() {
-    print("");
-    print("  ╔════════════════════════════════════════════════════╗");
-    print("  ║   High-Value Components — Score per Dollar        ║");
-    print("  ╚════════════════════════════════════════════════════╝");
-    print("");
+    print("\n  ── High-Value Components (Score per Dollar) ──");
 
     var results = db.components.aggregate([
         {
@@ -1133,9 +1314,7 @@ function section6_highValueComponents() {
         },
         {
             $project: {
-                name: 1,
-                type: 1,
-                price: 1,
+                name: 1, type: 1, price: 1,
                 score: "$specs.score",
                 value_ratio: {
                     $round: [{ $divide: ["$specs.score", "$price"] }, 2]
@@ -1165,44 +1344,24 @@ function section6_highValueComponents() {
             padLeft(String(r.value_ratio), 8));
     }
     print("");
-
     return results;
 }
 
 
 // ============================================================
-// Help / Quick Reference
+// Help
 // ============================================================
 
 function pcBuilderHelp() {
-    print("");
-    print("  ╔════════════════════════════════════════════════════════════════╗");
-    print("  ║   Interactive PC Builder — Quick Reference                    ║");
-    print("  ╠════════════════════════════════════════════════════════════════╣");
-    print("  ║                                                              ║");
-    print("  ║  STEP-BY-STEP BUILD:                                         ║");
-    print("  ║    stepCPU(budget, usage)   Start a new build                ║");
-    print("  ║    pick(#)                  Select from list, auto-next step ║");
-    print("  ║                                                              ║");
-    print("  ║  USAGE TYPES: 'gaming', 'workstation', 'budget', 'enthusiast'║");
-    print("  ║                                                              ║");
-    print("  ║  ANALYSIS PIPELINES:                                         ║");
-    print("  ║    section6_marketAnalysis()         Statistics by type       ║");
-    print("  ║    section6_manufacturerBreakdown()  Products per maker      ║");
-    print("  ║    section6_highValueComponents()    Best score-per-dollar   ║");
-    print("  ║                                                              ║");
-    print("  ║  EXAMPLE:                                                    ║");
-    print("  ║    stepCPU(1500, 'gaming')                                   ║");
-    print("  ║    pick(3)    ← selects CPU #3, shows motherboards           ║");
-    print("  ║    pick(2)    ← selects mobo #2, shows RAM                   ║");
-    print("  ║    pick(1)    ← selects RAM #1, shows GPUs                   ║");
-    print("  ║    ...        ← keep picking until build is complete!        ║");
-    print("  ║                                                              ║");
-    print("  ║  STEP ORDER: CPU → Mobo → RAM → GPU → Storage               ║");
-    print("  ║              → Cooler → PSU → Case → Done!                   ║");
-    print("  ║                                                              ║");
-    print("  ╚════════════════════════════════════════════════════════════════╝");
-    print("");
+    print("\n  PC Builder Commands:");
+    print("    stepCPU(budget, usage)  Start (usage: gaming/workstation/budget/enthusiast)");
+    print("    pick(#)                Select from list → auto-next step");
+    print("    pcBuilderHelp()        This help");
+    print("\n  Analysis:");
+    print("    section6_marketAnalysis()         Statistics by type");
+    print("    section6_manufacturerBreakdown()  Products per maker");
+    print("    section6_highValueComponents()    Best score-per-dollar");
+    print("\n  Order: CPU → Mobo → RAM → GPU → Storage → Cooler → PSU → Case → Done!\n");
 }
 
 
@@ -1213,7 +1372,6 @@ function pcBuilderHelp() {
 print("");
 print("  ╔════════════════════════════════════════════════════╗");
 print("  ║  ✓ Interactive PC Builder loaded!                  ║");
-print("  ║                                                    ║");
 print("  ║    pcBuilderHelp()           Full command list     ║");
 print("  ║    stepCPU(1500, 'gaming')   Start building!       ║");
 print("  ╚════════════════════════════════════════════════════╝");
