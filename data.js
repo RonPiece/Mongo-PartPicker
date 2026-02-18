@@ -291,6 +291,7 @@ function detectCpuSocket(cpuName) {
         var gNum = parseInt(g[2], 10);
         if (!isNaN(gNum)) {
             if (g[2].length === 4) {
+
                 // Newest budget parts: Alder Lake and newer
                 if (gNum >= 6900) return "LGA1700";
                 // Comet Lake (e.g. G5900/G6400/G6500)

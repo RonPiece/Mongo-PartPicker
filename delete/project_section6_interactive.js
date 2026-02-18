@@ -525,10 +525,12 @@ function stepMotherboard(cpuIndex) {
         { $unwind: "$socket_matches" },
 
         // Stage 4: $match — keep only Motherboards within budget + quality floor
+        // גם מחייב specs.ram_type — בלי זה שלב ה-RAM לא יכול לסנן DDR4/DDR5 נכון
         {
             $match: {
                 "socket_matches.type": "Motherboard",
-                "socket_matches.price": { $type: "number", $gte: minMoboPrice, $lte: maxPrice }
+                "socket_matches.price": { $type: "number", $gte: minMoboPrice, $lte: maxPrice },
+                "socket_matches.specs.ram_type": { $exists: true, $nin: [null, ""] }
             }
         },
 
@@ -556,6 +558,7 @@ function stepMotherboard(cpuIndex) {
         results = db.components.find({
             type: "Motherboard",
             "specs.socket": cpu.specs.socket,
+            "specs.ram_type": { $exists: true, $nin: [null, ""] },
             price: { $type: "number", $lte: remaining }
         }).sort({ price: 1 }).limit(15).toArray();
     }
@@ -565,6 +568,7 @@ function stepMotherboard(cpuIndex) {
         results = db.components.find({
             type: "Motherboard",
             "specs.socket": cpu.specs.socket,
+            "specs.ram_type": { $exists: true, $nin: [null, ""] },
             price: { $type: "number" }
         }).sort({ price: 1 }).limit(10).toArray();
     }
@@ -629,7 +633,7 @@ function stepRAM(moboIndex) {
     var ramTierFloor = tierToFloor(ramMinTier, buildState.tiers.RAM);
 
     print("\n  \u2713 Mobo: " + mobo.name + " (" + formatPrice(mobo.price) + ")");
-    print("  \u2139 RAM cap: profile " + profileMaxRam + "GB, mobo " + moboMaxRam + "GB \u2192 max " + maxRamGb + "GB");
+    print("  \u2139 Info: Limit set to " + maxRamGb + "GB (" + buildState.params.name + " profile) even though Mobo supports " + moboMaxRam + "GB.");
     if (ramTierFloor > 0) {
         print("  \u2139 Build Quality: Tier " + TIER_NAMES[buildState.buildTier] + " build \u2192 RAM min " + formatPrice(ramTierFloor));
     }
@@ -643,7 +647,7 @@ function stepRAM(moboIndex) {
         // Filter: min speed 3000MHz DDR4 / 4800MHz DDR5 — excludes slow server surplus
         "specs.speed_mhz": { $gte: (ramType === "DDR5") ? 4800 : 3000 },
         price: { $type: "number", $gte: ramTierFloor, $lte: maxPrice }
-    }).sort({ price: 1 }).limit(30).toArray();
+    }).sort({ "specs.capacity_gb": -1, price: 1 }).limit(30).toArray();
 
     // Section 3: JS filter — exclude ECC/Registered server RAM (won't boot on consumer boards)
     results = results.filter(function (r) {
@@ -710,8 +714,9 @@ function stepGPU(ramIndex) {
     var results = db.components.find({
         type: "GPU",
         price: { $type: "number", $lte: maxPrice },
-        "specs.score": { $type: "number", $gte: gpuMinScore }
-    }).sort({ "specs.score": -1 }).limit(15).toArray();
+        "specs.score": { $type: "number", $gte: gpuMinScore },
+        "specs.length_mm": { $type: "number", $gt: 0 }  // חובה — בלי זה שלב המארז לא יכול לבדוק התאמה
+    }).sort({ "specs.score": -1, price: 1 }).limit(15).toArray();
 
     // Fallback 1: drop score minimum but keep budget
     if (results.length === 0) {
@@ -719,15 +724,17 @@ function stepGPU(ramIndex) {
         results = db.components.find({
             type: "GPU",
             price: { $type: "number", $lte: maxPrice },
-            "specs.score": { $type: "number" }
-        }).sort({ "specs.score": -1 }).limit(15).toArray();
+            "specs.score": { $type: "number" },
+            "specs.length_mm": { $type: "number", $gt: 0 }
+        }).sort({ "specs.score": -1, price: 1 }).limit(15).toArray();
     }
 
-    // Fallback 2: cheapest GPUs (over budget)
+    // Fallback 2: cheapest GPUs with known length (over budget)
     if (results.length === 0) {
         print("  ⚠ No GPUs in budget — showing cheapest:");
         results = db.components.find({
-            type: "GPU", price: { $type: "number" }
+            type: "GPU", price: { $type: "number" },
+            "specs.length_mm": { $type: "number", $gt: 0 }
         }).sort({ price: 1 }).limit(10).toArray();
     }
 
@@ -1123,22 +1130,27 @@ function finalizeBuild(caseIndex) {
         generated_at: new Date()
     };
 
-    // Section 4: insertOne
+    // Section 4: insertOne — שמירת הבנייה לקולקציה
     db.recommended_combos.drop();
     db.recommended_combos.insertOne(completeBuild);
 
-    // Section 6: $add + $out — verify total and save to completed_builds
-    // $add סוכם את כל מחירי הרכיבים, $out שומר לקולקציה נפרדת
+    // Section 6: $add + $out — מחשב computed_total ומחליף את הקולקציה בגרסה המלאה
+    // $add סוכם את כל מחירי הרכיבים (אימות עצמאי של total_price)
+    // $out מחליף את הקולקציה בשלמותה עם השדה המחושב
     db.recommended_combos.aggregate([
         { $match: { build_method: "interactive" } },
         {
             $project: {
                 build_name: 1,
+                usage_type: 1,
+                build_method: 1,
+                target_budget: 1,
                 components: 1,
                 price_breakdown: 1,
+                compatibility_details: 1,
                 performance_metrics: 1,
                 total_price: 1,
-                // Section 6: $add — sum all component prices
+                // Section 6: $add — MongoDB מחשב את הסכום בעצמו (אימות עצמאי)
                 computed_total: {
                     $add: [
                         "$price_breakdown.cpu",
@@ -1154,8 +1166,8 @@ function finalizeBuild(caseIndex) {
                 generated_at: 1
             }
         },
-        // Section 6: $out — save to separate collection
-        { $out: "completed_builds" }
+        // Section 6: $out — שומר ישירות ל-recommended_combos עם computed_total
+        { $out: "recommended_combos" }
     ]);
 
     // --- Print Final Summary ---
@@ -1187,7 +1199,7 @@ function finalizeBuild(caseIndex) {
     if (overBudget) {
         print("\n  ⚠ Over budget by " + pct + "%. Consider cheaper options.");
     }
-    print("\n  ✓ Saved to 'recommended_combos' + 'completed_builds' ($out)");
+    print("\n  ✓ Saved to 'recommended_combos' ($add + $out)");
     print("  → stepCPU(budget, 'usage') for a new build\n");
 
     buildState.step = 0;
@@ -1256,7 +1268,7 @@ function section6_manufacturerBreakdown() {
     print("\n  ── Manufacturer Breakdown ──");
 
     var results = db.components.aggregate([
-        { $match: { manufacturer: { $exists: true, $ne: null } } },
+        { $match: { manufacturer: { $exists: true, $ne: null }, price: { $type: "number", $gt: 0 } } },
         {
             $group: {
                 _id: { manufacturer: "$manufacturer", type: "$type" },
@@ -1291,57 +1303,6 @@ function section6_manufacturerBreakdown() {
                 padLeft(String(m.categories[c].count), 4) + " items" +
                 padLeft("avg " + formatPrice(m.categories[c].avg_price), 14));
         }
-    }
-    print("");
-    return results;
-}
-
-
-// ============================================================
-// Pipeline #4 — High-Value Components (Section 6)
-// $match, $project ($divide, $round), $match ($expr), $sort, $limit
-// ============================================================
-
-function section6_highValueComponents() {
-    print("\n  ── High-Value Components (Score per Dollar) ──");
-
-    var results = db.components.aggregate([
-        {
-            $match: {
-                "specs.score": { $type: "number", $gt: 0 },
-                price: { $type: "number", $gt: 0 }
-            }
-        },
-        {
-            $project: {
-                name: 1, type: 1, price: 1,
-                score: "$specs.score",
-                value_ratio: {
-                    $round: [{ $divide: ["$specs.score", "$price"] }, 2]
-                }
-            }
-        },
-        {
-            $match: {
-                $expr: { $gt: ["$value_ratio", 5] }
-            }
-        },
-        { $sort: { value_ratio: -1 } },
-        { $limit: 20 }
-    ]).toArray();
-
-    var hdr = "  " + padRight("Name", 45) + padLeft("Type", 10) +
-        padLeft("Price", 10) + padLeft("Score", 8) + padLeft("Pts/$", 8);
-    print(hdr);
-    print("  " + Array(hdr.length).join("─"));
-
-    for (var i = 0; i < results.length; i++) {
-        var r = results[i];
-        print("  " + padRight(truncate(r.name, 43), 45) +
-            padLeft(r.type, 10) +
-            padLeft(formatPrice(r.price), 10) +
-            padLeft(String(r.score), 8) +
-            padLeft(String(r.value_ratio), 8));
     }
     print("");
     return results;
