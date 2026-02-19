@@ -1930,45 +1930,49 @@ function finalizeBuild(caseIndex) {
         generated_at: new Date()
     };
 
-    // Section 4: insertOne — שמירת הבנייה לקולקציה
-    db.recommended_combos.drop();
-    db.recommended_combos.insertOne(completeBuild);
+    // Section 4: insertOne + Section 6: $add + $out
+    // במצב אינטראקטיבי: מחיקה + שמירה + $out (כמו קודם)
+    // במצב אוטומטי (_autoMode): דילוג — generateRecommendedCombosSamples מנהלת את ה-batch
+    if (!buildState._autoMode) {
+        db.recommended_combos.drop();
+        db.recommended_combos.insertOne(completeBuild);
 
-    // Section 6: $add + $out — מחשב computed_total ומחליף את הקולקציה בגרסה המלאה
-    // $add סוכם את כל מחירי הרכיבים (אימות עצמאי של total_price)
-    // $out מחליף את הקולקציה בשלמותה עם השדה המחושב
-    db.recommended_combos.aggregate([
-        { $match: { build_method: "interactive" } },
-        {
-            $project: {
-                build_name: 1,
-                usage_type: 1,
-                build_method: 1,
-                target_budget: 1,
-                components: 1,
-                price_breakdown: 1,
-                compatibility_details: 1,
-                performance_metrics: 1,
-                total_price: 1,
-                // Section 6: $add — MongoDB מחשב את הסכום בעצמו (אימות עצמאי)
-                computed_total: {
-                    $add: [
-                        "$price_breakdown.cpu",
-                        "$price_breakdown.motherboard",
-                        "$price_breakdown.ram",
-                        "$price_breakdown.gpu",
-                        "$price_breakdown.storage",
-                        "$price_breakdown.cooler",
-                        "$price_breakdown.psu",
-                        "$price_breakdown.case_price"
-                    ]
-                },
-                generated_at: 1
-            }
-        },
-        // Section 6: $out — שומר ישירות ל-recommended_combos עם computed_total
-        { $out: "recommended_combos" }
-    ]);
+        // Section 6: $add + $out — מחשב computed_total ומחליף את הקולקציה בגרסה המלאה
+        // $add סוכם את כל מחירי הרכיבים (אימות עצמאי של total_price)
+        // $out מחליף את הקולקציה בשלמותה עם השדה המחושב
+        db.recommended_combos.aggregate([
+            { $match: { build_method: "interactive" } },
+            {
+                $project: {
+                    build_name: 1,
+                    usage_type: 1,
+                    build_method: 1,
+                    target_budget: 1,
+                    components: 1,
+                    price_breakdown: 1,
+                    compatibility_details: 1,
+                    performance_metrics: 1,
+                    total_price: 1,
+                    // Section 6: $add — MongoDB מחשב את הסכום בעצמו (אימות עצמאי)
+                    computed_total: {
+                        $add: [
+                            "$price_breakdown.cpu",
+                            "$price_breakdown.motherboard",
+                            "$price_breakdown.ram",
+                            "$price_breakdown.gpu",
+                            "$price_breakdown.storage",
+                            "$price_breakdown.cooler",
+                            "$price_breakdown.psu",
+                            "$price_breakdown.case_price"
+                        ]
+                    },
+                    generated_at: 1
+                }
+            },
+            // Section 6: $out — שומר ישירות ל-recommended_combos עם computed_total
+            { $out: "recommended_combos" }
+        ]);
+    }
 
     // --- Print Final Summary ---
     var overBudget = totalPrice > buildState.budget;
@@ -2140,181 +2144,96 @@ print("");
 
 // ============================================================
 // Section 7 helpers — Auto-Builder (used by MapReduce)
-// Generates sample builds across a budget range for MapReduce
+// מריץ את כל שלבי stepCPU בשקט על טווח תקציבים ושימושים
 // ============================================================
 
-function autoBuilderPipeline(maxBudget, buildNameLiteral, usageType) {
-    var usage = (usageType || "gaming").toLowerCase();
-    var cpuBudgetRatio = (usage === "workstation") ? 0.40 : (usage === "budget") ? 0.30 : 0.25;
-    var minRamGb = (usage === "workstation") ? 32 : 16;
-    var maxCpuPrice = maxBudget * cpuBudgetRatio;
-    return [
-        {
-            $match: {
-                type: "CPU", price: { $type: "number", $lte: maxCpuPrice },
-                "specs.score": { $type: "number" }, "requirements.socket_match": { $exists: true, $ne: null }
-            }
-        },
-        { $sort: { "specs.score": -1, price: 1 } }, { $limit: 10 },
-        {
-            $lookup: {
-                from: "components", let: { s: "$requirements.socket_match" },
-                pipeline: [{
-                    $match: {
-                        type: "Motherboard", price: { $type: "number" },
-                        $expr: { $eq: ["$specs.socket", "$$s"] }
-                    }
-                }, { $sort: { price: 1 } }, { $limit: 1 }], as: "mobo"
-            }
-        },
-        { $unwind: "$mobo" },
-        {
-            $addFields: {
-                required_ram_type: {
-                    $ifNull: ["$mobo.specs.ram_type",
-                        {
-                            $switch: {
-                                branches: [
-                                    { case: { $in: ["$mobo.specs.socket", ["AM5", "LGA1851"]] }, then: "DDR5" },
-                                    { case: { $in: ["$mobo.specs.socket", ["AM4", "LGA1200", "LGA1151"]] }, then: "DDR4" }
-                                ], default: "DDR4"
-                            }
-                        }]
-                }
-            }
-        },
-        {
-            $lookup: {
-                from: "components", let: { rt: "$required_ram_type" },
-                pipeline: [{
-                    $match: {
-                        type: "RAM", price: { $type: "number" },
-                        "specs.capacity_gb": { $type: "number", $gte: minRamGb },
-                        $expr: { $eq: ["$specs.generation", "$$rt"] }
-                    }
-                }, { $sort: { price: 1 } }, { $limit: 1 }], as: "ram"
-            }
-        },
-        { $unwind: "$ram" },
-        {
-            $addFields: {
-                base_cost: { $add: ["$price", "$mobo.price", "$ram.price"] },
-                remaining_budget: { $subtract: [maxBudget, { $add: ["$price", "$mobo.price", "$ram.price"] }] }
-            }
-        },
-        {
-            $lookup: {
-                from: "components", let: { ml: "$remaining_budget" },
-                pipeline: [{
-                    $match: {
-                        type: "GPU", price: { $type: "number" }, "specs.score": { $type: "number" },
-                        "specs.length_mm": { $type: "number" }, $expr: { $lte: ["$price", "$$ml"] }
-                    }
-                },
-                { $sort: { "specs.score": -1, price: 1 } }, { $limit: 5 }], as: "gpu"
-            }
-        },
-        { $unwind: "$gpu" },
-        {
-            $lookup: {
-                from: "components", pipeline: [{ $match: { type: "CPU Cooler", price: { $type: "number" } } },
-                { $sort: { price: 1 } }, { $limit: 1 }], as: "cooler"
-            }
-        }, { $unwind: "$cooler" },
-        {
-            $lookup: {
-                from: "components", let: { gl: "$gpu.specs.length_mm" },
-                pipeline: [{
-                    $match: {
-                        type: "Case", price: { $type: "number" },
-                        "specs.max_gpu_length": { $type: "number" }, $expr: { $gte: ["$specs.max_gpu_length", "$$gl"] }
-                    }
-                },
-                { $sort: { price: 1 } }, { $limit: 1 }], as: "pc_case"
-            }
-        }, { $unwind: "$pc_case" },
-        {
-            $addFields: {
-                estimated_required_watts: {
-                    $add: [
-                        { $ifNull: ["$specs.tdp", 65] }, { $multiply: [{ $ifNull: ["$gpu.specs.vram", 8] }, 20] }, 200]
-                }
-            }
-        },
-        {
-            $lookup: {
-                from: "components", let: { rw: "$estimated_required_watts" },
-                pipeline: [{
-                    $match: {
-                        type: "Power Supply", price: { $type: "number" },
-                        "specs.wattage": { $type: "number" }, $expr: { $gte: ["$specs.wattage", "$$rw"] }
-                    }
-                },
-                { $sort: { price: 1 } }, { $limit: 1 }], as: "psu"
-            }
-        }, { $unwind: "$psu" },
-        {
-            $lookup: {
-                from: "components", pipeline: [{
-                    $match: {
-                        type: "Storage", price: { $type: "number" },
-                        "specs.capacity_gb": { $type: "number" }
-                    }
-                }, { $sort: { price: 1 } }, { $limit: 1 }], as: "storage"
-            }
-        },
-        { $unwind: "$storage" },
-        {
-            $project: {
-                _id: 0, build_name: { $literal: buildNameLiteral },
-                components: {
-                    cpu: "$name", motherboard: "$mobo.name", ram: "$ram.name", gpu: "$gpu.name",
-                    case: "$pc_case.name", psu: "$psu.name", storage: "$storage.name", cooler: "$cooler.name"
-                },
-                total_price: {
-                    $add: ["$price", "$mobo.price", "$ram.price", "$gpu.price",
-                        "$cooler.price", "$pc_case.price", "$psu.price", "$storage.price"]
-                },
-                performance_score: { $add: ["$specs.score", "$gpu.specs.score"] }
-            }
-        },
-        { $match: { total_price: { $type: "number", $lte: maxBudget } } },
-        { $sort: { performance_score: -1, total_price: 1 } }, { $limit: 1 }
-    ];
+/**
+ * מריץ בשקט את ה-pipeline האינטראקטיבי המלא (stepCPU → ... → finalizeBuild)
+ * עבור תקציב ו-usageType נתונים, ומחזיר את מסמך הבנייה.
+ * כל שלב בוחר אוטומטית את האפשרות הראשונה (הטובה ביותר) ברשימה.
+ * @param {number} budget   - תקציב מקסימלי לבנייה
+ * @param {string} usage    - סוג שימוש: gaming/workstation/budget/enthusiast
+ * @returns {object|null}   - מסמך הבנייה המלא, או null אם נכשל
+ */
+function buildComputerByBudgetDoc(budget, usage) {
+    // דכא הדפסות + דגל autoMode כדי ש-finalizeBuild לא ימחק את הקולקציה
+    var _realPrint = print;
+    print = function () { };
+    buildState._autoMode = true;
+
+    var doc = null;
+    try {
+        stepCPU(budget, usage);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepMotherboard(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepRAM(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepGPU(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepStorage(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepCooler(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepPSU(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        stepCase(1);
+        if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
+
+        doc = finalizeBuild(1);
+    } catch (e) {
+        // בנייה נכשלה (תקציב נמוך מדי / אין חלקים תואמים)
+    }
+
+    buildState._autoMode = false;
+    print = _realPrint;
+
+    // הוסף performance_score ברמה עליונה כדי ש-MapReduce יוכל לקרוא אותו
+    if (doc && doc.performance_metrics) {
+        doc.performance_score = doc.performance_metrics.weighted_score ||
+            ((doc.performance_metrics.cpu_score || 0) + (doc.performance_metrics.gpu_score || 0));
+    }
+    return doc || null;
 }
 
-function buildComputerByBudgetDoc(maxBudget, runIndex, usageType) {
-    var usage = usageType || "gaming";
-    var idx = (runIndex !== null && runIndex !== undefined) ? runIndex : null;
-    var label = idx
-        ? (usage.charAt(0).toUpperCase() + usage.slice(1) + " Build for $" + maxBudget + " (run " + idx + ")")
-        : (usage.charAt(0).toUpperCase() + usage.slice(1) + " Build for $" + maxBudget);
-    var pipeline = autoBuilderPipeline(maxBudget, label, usage);
-    var doc = db.components.aggregate(pipeline).toArray()[0];
-    if (!doc) return null;
-    doc._id = ObjectId();
-    doc.target_budget = maxBudget;
-    doc.usage_type = usage;
-    doc.generated_at = new Date();
-    return doc;
-}
-
-function generateRecommendedCombosSamples(samples, minBudget, maxBudget) {
-    var n = (samples !== null && samples !== undefined) ? samples : 100;
-    var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 1000;
-    var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 3500;
+/**
+ * מייצר אוסף builds ב-recommended_combos על ידי הרצת buildComputerByBudgetDoc
+ * לכל שילוב תקציב × סוג שימוש בטווח הנתון.
+ * @param {number} samplesPerUsage - כמה נקודות תקציב לכל סוג שימוש (ברירת מחדל: 10)
+ * @param {number} minBudget       - תקציב מינימלי (ברירת מחדל: 800)
+ * @param {number} maxBudget       - תקציב מקסימלי (ברירת מחדל: 4000)
+ * @returns {number} - מספר הבניות שנשמרו בהצלחה
+ */
+function generateRecommendedCombosSamples(samplesPerUsage, minBudget, maxBudget) {
+    var n = (samplesPerUsage !== null && samplesPerUsage !== undefined) ? samplesPerUsage : 10;
+    var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 800;
+    var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 4000;
     if (n <= 0) return 0;
     if (maxB < minB) { var tmp = minB; minB = maxB; maxB = tmp; }
-    db.recommended_combos.drop();
-    db.createCollection("recommended_combos");
+
+    var usages = ["gaming", "workstation", "budget", "enthusiast"];
+
+    // אין drop — מוסיף על הקיים כדי לצבור כמה שיותר נתונים ל-MapReduce
+
     var batch = [];
-    for (var i = 0; i < n; i++) {
-        var denom = (n === 1) ? 1 : (n - 1);
-        var t = i / denom;
-        var budget = Math.round(minB + (maxB - minB) * t);
-        var doc = buildComputerByBudgetDoc(budget, i + 1);
-        if (doc) batch.push(doc);
+    for (var u = 0; u < usages.length; u++) {
+        var usage = usages[u];
+        for (var i = 0; i < n; i++) {
+            var denom = (n === 1) ? 1 : (n - 1);
+            var t = i / denom;
+            var budget = Math.round(minB + (maxB - minB) * t);
+            var doc = buildComputerByBudgetDoc(budget, usage);
+            if (doc) batch.push(doc);
+        }
     }
+
     if (batch.length) { db.recommended_combos.insertMany(batch); }
     return batch.length;
 }
@@ -2326,16 +2245,15 @@ function generateRecommendedCombosSamples(samples, minBudget, maxBudget) {
 // ============================================================
 
 function section7_mapReduce(samples, minBudget, maxBudget) {
-    // Generate many auto-build samples so MapReduce is meaningful.
-
-    // NOTE: This can be slow because it runs many aggregation pipelines.
-    // Keep a reasonable default so it doesn't look like it "hangs" in mongosh.
+    // מריץ generateRecommendedCombosSamples (שמשתמשת ב-stepCPU) ואז MapReduce על התוצאות.
+    // samples = מספר נקודות תקציב לכל סוג שימוש (gaming/workstation/budget/enthusiast)
+    // סה"כ בניות = samples × 4 שימושים
     var n = (samples !== null && samples !== undefined) ? samples : 30;
     var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 900;
     var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 4000;
 
     var started = new Date();
-    print("[Section 7] Generating recommended combos: n=" + n + ", range=$" + minB + "-$" + maxB);
+    print("[Section 7] מריץ stepCPU pipeline: " + n + " נקודות × 4 שימושים, טווח $" + minB + "-$" + maxB);
     generateRecommendedCombosSamples(n, minB, maxB);
     try {
         print("[Section 7] recommended_combos count: " + db.recommended_combos.countDocuments());
@@ -2360,7 +2278,12 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
         emit(tier, {
             combo_id: this._id,
             build_name: this.build_name,
-            score: this.performance_score,
+            // performance_score ברמה עליונה (auto builds) או מתוך performance_metrics (interactive)
+            score: this.performance_score ||
+                (this.performance_metrics && (
+                    this.performance_metrics.weighted_score ||
+                    (this.performance_metrics.cpu_score || 0) + (this.performance_metrics.gpu_score || 0)
+                )) || 0,
             price: this.total_price,
             target_budget: this.target_budget
         });
