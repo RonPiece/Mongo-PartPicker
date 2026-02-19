@@ -1152,7 +1152,7 @@ function pick(index) {
     if (next === 7) return stepPSU(index);
     if (next === 8) return stepCase(index);
     if (next === 9) return finalizeBuild(index);
-    print("  ERROR: No active build. Start with:  stepCPU(budget, 'gaming')");
+    print("  ERROR: No active build. Start with:  startBuild(budget, 'gaming')");
 }
 
 /**
@@ -1193,7 +1193,7 @@ function validateAndSave(index, key, newStep) {
 // Section 6: aggregate() with $match, $project, $sort, $limit
 // ============================================================
 
-function stepCPU(budget, usageType) {
+function startBuild(budget, usageType) {
     buildState.budget = budget;
     buildState.usage = usageType || "gaming";
     buildState.params = getProfileParams(buildState.usage);
@@ -2119,7 +2119,7 @@ function section6_manufacturerBreakdown() {
 
 function pcBuilderHelp() {
     print("\n  PC Builder Commands:");
-    print("    stepCPU(budget, usage)  Start (usage: gaming/workstation/budget/enthusiast)");
+    print("    startBuild(budget, usage)  Start (usage: gaming/workstation/budget/enthusiast)");
     print("    pick(#)                Select from list → auto-next step");
     print("    pcBuilderHelp()        This help");
     print("\n  Analysis:");
@@ -2138,7 +2138,7 @@ print("");
 print("  ╔════════════════════════════════════════════════════╗");
 print("  ║  ✓ Interactive PC Builder loaded!                  ║");
 print("  ║    pcBuilderHelp()           Full command list     ║");
-print("  ║    stepCPU(1500, 'gaming')   Start building!       ║");
+print("  ║    startBuild(1500, 'gaming')  Start building!       ║");
 print("  ╚════════════════════════════════════════════════════╝");
 print("");
 
@@ -2163,7 +2163,7 @@ function buildComputerByBudgetDoc(budget, usage) {
 
     var doc = null;
     try {
-        stepCPU(budget, usage);
+        startBuild(budget, usage);
         if (!buildState.lastResults || buildState.lastResults.length === 0) { buildState._autoMode = false; print = _realPrint; return null; }
 
         stepMotherboard(1);
@@ -2285,7 +2285,9 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
                     (this.performance_metrics.cpu_score || 0) + (this.performance_metrics.gpu_score || 0)
                 )) || 0,
             price: this.total_price,
-            target_budget: this.target_budget
+            target_budget: this.target_budget,
+            // מפרט הרכיבים של הבנייה
+            components: this.components || {}
         });
     };
 
@@ -2307,14 +2309,16 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
             winner: reducedValue.build_name,
             performance_score: reducedValue.score,
             actual_price: reducedValue.price,
-            target_budget: reducedValue.target_budget
+            target_budget: reducedValue.target_budget,
+            // מפרט הרכיבים של הבנייה המנצחת
+            components: reducedValue.components
         };
     };
 
     db.best_builds_per_tier.drop();
     db.recommended_combos.mapReduce(mapBudgetTier, reduceBestBuild, {
         out: "best_builds_per_tier",
-        query: { total_price: { $type: "number" }, performance_score: { $type: "number" } },
+        query: { total_price: { $type: "number" } },
         finalize: finalizeBestBuild
     });
 
