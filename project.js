@@ -491,6 +491,8 @@ db.users.insertMany([
 
 })();
 
+print("\n  ✓ Data loaded and seeded successfully.");
+
 // ============================================================
 // Section 3: JSON + JavaScript (Functions and processing)
 // Note: JSON loading is done in data.js using cat() + JSON.parse()
@@ -536,238 +538,247 @@ function getRamCount() {
 
 // ============================================================
 // Section 4: Search and Retrieval (Queries) - clean version
+// Run:  section4_queries()
 // ============================================================
 
-// 1. Simple query with Projection and use of limit
-// Finds CPUs with a score higher than 30,000 and shows only name, price, and score
-db.components.find(
-    { type: "CPU", "specs.score": { $gt: 30000 } },
-    { name: 1, price: 1, "specs.score": 1, _id: 0 }
-).limit(2)
+function section4_queries() {
+
+    // 1. Simple query with Projection and use of limit
+    // Finds CPUs with a score higher than 30,000 and shows only name, price, and score
+    db.components.find(
+        { type: "CPU", "specs.score": { $gt: 30000 } },
+        { name: 1, price: 1, "specs.score": 1, _id: 0 }
+    ).limit(2)
 
 
-// 2. Query on embedded documents and arrays (Embedded)
-// Requirement: access elements inside arrays
-// Finds users who made an order that contains an item of type GPU
-// Method: Dot Notation - direct access into nested arrays
-db.users.find(
-    { "orders.items.type": "GPU" },
-    { username: 1, email: 1, _id: 0 }
-).limit(3)
+    // 2. Query on embedded documents and arrays (Embedded)
+    // Requirement: access elements inside arrays
+    // Finds users who made an order that contains an item of type GPU
+    // Method: Dot Notation - direct access into nested arrays
+    db.users.find(
+        { "orders.items.type": "GPU" },
+        { username: 1, email: 1, _id: 0 }
+    ).limit(3)
 
 
-// 3. Query on referenced data (Referenced)
-// Requirement: data coming from documents that are referenced
-// Step A: fetch the ID of the RTX 4090 GPU
-var gpuDoc = db.components.findOne({ name: { $regex: "RTX 4090", $options: "i" } });
+    // 3. Query on referenced data (Referenced)
+    // Requirement: data coming from documents that are referenced
+    // Step A: fetch the ID of the RTX 4090 GPU
+    var gpuDoc = db.components.findOne({ name: { $regex: "RTX 4090", $options: "i" } });
 
-// Step B: find all builds that contain this component in their parts array
-db.builds.find(
-    { parts: gpuDoc._id },
-    { build_name: 1, total_price: 1, _id: 0 }
-).limit(3)
-
-
-// 4. Combine sort, skip, limit, and convert to array
-// Requirement: combine sort, skip, limit, toArray
-// Finds the most expensive motherboards, skips the first 2, and takes the next 3
-db.components.find({ type: "Motherboard" })
-    .sort({ price: -1 }) // Sort from expensive to cheap
-    .skip(2)             // Skip the 2 most expensive
-    .limit(3)            // Show the next 3
-    .toArray()           // Convert to a JavaScript array
+    // Step B: find all builds that contain this component in their parts array
+    db.builds.find(
+        { parts: gpuDoc._id },
+        { build_name: 1, total_price: 1, _id: 0 }
+    ).limit(3)
 
 
-// 5. Using a forEach loop
-// Requirement: use forEach
-// Iterate over cheap RAM kits (under $40) and perform an action (print) for each document
-db.components.find({ type: "RAM", price: { $lt: 40 } })
-    .limit(3)
-    .forEach(function (ram) {
-        print(">> Great deal! The RAM " + ram.name + " costs only $" + ram.price);
-    })
+    // 4. Combine sort, skip, limit, and convert to array
+    // Requirement: combine sort, skip, limit, toArray
+    // Finds the most expensive motherboards, skips the first 2, and takes the next 3
+    db.components.find({ type: "Motherboard" })
+        .sort({ price: -1 }) // Sort from expensive to cheap
+        .skip(2)             // Skip the 2 most expensive
+        .limit(3)            // Show the next 3
+        .toArray()           // Convert to a JavaScript array
 
 
-// 6. Complex logical query ($or + Regex)
-// Search for cases (Case) from ASUS or MSI (text search)
-db.components.find(
-    {
-        type: "Case",
-        $or: [
-            { name: { $regex: "ASUS", $options: "i" } },
-            { name: { $regex: "MSI", $options: "i" } }
-        ]
-    },
-    { name: 1, price: 1, _id: 0 }
-).limit(3)
+    // 5. Using a forEach loop
+    // Requirement: use forEach
+    // Iterate over cheap RAM kits (under $40) and perform an action (print) for each document
+    db.components.find({ type: "RAM", price: { $lt: 40 } })
+        .limit(3)
+        .forEach(function (ram) {
+            print(">> Great deal! The RAM " + ram.name + " costs only $" + ram.price);
+        })
 
 
-// 7. Count
-// Requirement: use count
-// Check how many components exist in total in the catalog
-db.components.count({})
+    // 6. Complex logical query ($or + Regex)
+    // Search for cases (Case) from ASUS or MSI (text search)
+    db.components.find(
+        {
+            type: "Case",
+            $or: [
+                { name: { $regex: "ASUS", $options: "i" } },
+                { name: { $regex: "MSI", $options: "i" } }
+            ]
+        },
+        { name: 1, price: 1, _id: 0 }
+    ).limit(3)
 
 
-// 8. $in operator - Query multiple types at once
-// Finds components that are either a CPU or GPU, sorted by price (expensive first)
-db.components.find(
-    { type: { $in: ["CPU", "GPU"] }, price: { $type: "number" } },
-    { name: 1, type: 1, price: 1, _id: 0 }
-).sort({ price: -1 }).limit(3)
+    // 7. Count
+    // Requirement: use count
+    // Check how many components exist in total in the catalog
+    db.components.count({})
 
 
-// 9. $exists + array index check - Find components that have reviews
-// Uses "reviews.0" ($exists) to verify the array is non-empty
-db.components.find(
-    { reviews: { $exists: true }, "reviews.0": { $exists: true } },
-    { name: 1, type: 1, "reviews.user": 1, "reviews.rating": 1, _id: 0 }
-).limit(5)
+    // 8. $in operator - Query multiple types at once
+    // Finds components that are either a CPU or GPU, sorted by price (expensive first)
+    db.components.find(
+        { type: { $in: ["CPU", "GPU"] }, price: { $type: "number" } },
+        { name: 1, type: 1, price: 1, _id: 0 }
+    ).sort({ price: -1 }).limit(3)
 
 
-// 10. cursor .count() (deprecated but required per spec)
-// Counts the number of GPUs with a numeric price using the legacy count() method
-db.components.find({ type: "GPU", price: { $type: "number" } }).count()
+    // 9. $exists + array index check - Find components that have reviews
+    // Uses "reviews.0" ($exists) to verify the array is non-empty
+    db.components.find(
+        { reviews: { $exists: true }, "reviews.0": { $exists: true } },
+        { name: 1, type: 1, "reviews.user": 1, "reviews.rating": 1, _id: 0 }
+    ).limit(5)
 
 
-// 11. Explicit $and with range query ($gte + $lte)
-// Finds GPUs priced between $300 and $800 - shows combining logical operators
-db.components.find(
-    {
-        $and: [
-            { type: "GPU" },
-            { price: { $gte: 300 } },
-            { price: { $lte: 800 } }
-        ]
-    },
-    { name: 1, price: 1, "specs.chipset": 1, _id: 0 }
-).sort({ price: 1 }).limit(5)
+    // 10. cursor .count() (deprecated but required per spec)
+    // Counts the number of GPUs with a numeric price using the legacy count() method
+    db.components.find({ type: "GPU", price: { $type: "number" } }).count()
 
 
+    // 11. Explicit $and with range query ($gte + $lte)
+    // Finds GPUs priced between $300 and $800 - shows combining logical operators
+    db.components.find(
+        {
+            $and: [
+                { type: "GPU" },
+                { price: { $gte: 300 } },
+                { price: { $lte: 800 } }
+            ]
+        },
+        { name: 1, price: 1, "specs.chipset": 1, _id: 0 }
+    ).sort({ price: 1 }).limit(5)
+
+
+} // end section4_queries()
 
 
 // ============================================================
 // Section 5: Updates & Deletes
+// Run:  section5_updatesAndDeletes()
 // ============================================================
 
-// 1. $set - Update standard fields
-// Updates the score and adds a new boolean field 'is_featured'
-db.components.updateOne(
-    { name: "Intel Core i5-14600K" },
-    { $set: { "specs.score": 33000, is_featured: true } }
-);
+function section5_updatesAndDeletes() {
 
-// 2. $push - Add to array
-// Adds a new review object to the 'reviews' array
-db.components.updateOne(
-    { name: "AMD Ryzen 7 7800X3D" },
-    { $push: { reviews: { user: "newreviewer", rating: 5, comment: "Excellent!", date: new Date() } } }
-);
+    // 1. $set - Update standard fields
+    // Updates the score and adds a new boolean field 'is_featured'
+    db.components.updateOne(
+        { name: "Intel Core i5-14600K" },
+        { $set: { "specs.score": 33000, is_featured: true } }
+    );
 
-// 3. $pull - Remove from array
-// Removes the specific review we just added (cleanup)
-db.components.updateOne(
-    { name: "AMD Ryzen 7 7800X3D" },
-    { $pull: { reviews: { user: "newreviewer" } } }
-);
+    // 2. $push - Add to array
+    // Adds a new review object to the 'reviews' array
+    db.components.updateOne(
+        { name: "AMD Ryzen 7 7800X3D" },
+        { $push: { reviews: { user: "newreviewer", rating: 5, comment: "Excellent!", date: new Date() } } }
+    );
 
-// 4. updateMany - Bulk update
-// Sets 'in_stock: true' for all documents in the collection
-db.components.updateMany({}, { $set: { in_stock: true } });
+    // 3. $pull - Remove from array
+    // Removes the specific review we just added (cleanup)
+    db.components.updateOne(
+        { name: "AMD Ryzen 7 7800X3D" },
+        { $pull: { reviews: { user: "newreviewer" } } }
+    );
 
-// 5. $inc - Mathematical calculation (Increment)
-// Increases price by 10
-db.components.updateMany(
-    { manufacturer: "NVIDIA", price: { $type: "number" } },
-    { $inc: { price: 10 } }
-);
+    // 4. updateMany - Bulk update
+    // Sets 'in_stock: true' for all documents in the collection
+    db.components.updateMany({}, { $set: { in_stock: true } });
 
-// Reverts to original price (Decreases by 10)
-db.components.updateMany(
-    { manufacturer: "NVIDIA", price: { $type: "number" } },
-    { $inc: { price: -10 } }
-);
+    // 5. $inc - Mathematical calculation (Increment)
+    // Increases price by 10
+    db.components.updateMany(
+        { manufacturer: "NVIDIA", price: { $type: "number" } },
+        { $inc: { price: 10 } }
+    );
 
-// 6. $addToSet - Add to array without duplicates
-// Adds the 'Best Seller' tag only if it doesn't already exist
-db.components.updateOne(
-    { type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" },
-    { $addToSet: { tags: "Best Seller" } }
-);
+    // Reverts to original price (Decreases by 10)
+    db.components.updateMany(
+        { manufacturer: "NVIDIA", price: { $type: "number" } },
+        { $inc: { price: -10 } }
+    );
 
-// 7. $pop - Remove from end of array
-// Removes the last element from the 'price_history' array
-db.components.updateOne(
-    { name: "Samsung 990 Pro 2TB" },
-    { $pop: { price_history: 1 } }
-);
+    // 6. $addToSet - Add to array without duplicates
+    // Adds the 'Best Seller' tag only if it doesn't already exist
+    db.components.updateOne(
+        { type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" },
+        { $addToSet: { tags: "Best Seller" } }
+    );
 
-// 8. $unset - Remove field completely
-// Deletes the 'is_featured' field from the document
-db.components.updateOne(
-    { name: "Intel Core i5-14600K" },
-    { $unset: { is_featured: "" } }
-);
+    // 7. $pop - Remove from end of array
+    // Removes the last element from the 'price_history' array
+    db.components.updateOne(
+        { name: "Samsung 990 Pro 2TB" },
+        { $pop: { price_history: 1 } }
+    );
 
-// Restore the original score after the $set demo (cores×100 + base_clock×50 = 14×100 + 3.5×50 = 1575)
-db.components.updateOne(
-    { name: "Intel Core i5-14600K" },
-    { $set: { "specs.score": 1575 } }
-);
+    // 8. $unset - Remove field completely
+    // Deletes the 'is_featured' field from the document
+    db.components.updateOne(
+        { name: "Intel Core i5-14600K" },
+        { $unset: { is_featured: "" } }
+    );
 
-// 9. deleteOne - Delete a single document
-// Inserts a temporary document and then deletes it
-db.components.insertOne({
-    _id: ObjectId(), type: "Demo", name: "TEMP-DELETE-ME", price: 0
-});
-db.components.deleteOne({ name: "TEMP-DELETE-ME" });
+    // Restore the original score after the $set demo (cores×100 + base_clock×50 = 14×100 + 3.5×50 = 1575)
+    db.components.updateOne(
+        { name: "Intel Core i5-14600K" },
+        { $set: { "specs.score": 1575 } }
+    );
 
-// --- Collection Management ---
+    // 9. deleteOne - Delete a single document
+    // Inserts a temporary document and then deletes it
+    db.components.insertOne({
+        _id: ObjectId(), type: "Demo", name: "TEMP-DELETE-ME", price: 0
+    });
+    db.components.deleteOne({ name: "TEMP-DELETE-ME" });
 
-// 10. Full collection backup ($out)
-// Duplicates the entire 'builds' collection to 'builds_backup'
-db.builds_backup.drop();
-db.builds.aggregate([{ $match: {} }, { $out: "builds_backup" }]);
+    // --- Collection Management ---
 
-// 11. Partial collection backup (by criterion)
-// Creates a backup containing only 'Gaming' builds
-db.gaming_builds.drop();
-db.builds.aggregate([{ $match: { usage_type: "Gaming" } }, { $out: "gaming_builds" }]);
+    // 10. Full collection backup ($out)
+    // Duplicates the entire 'builds' collection to 'builds_backup'
+    db.builds_backup.drop();
+    db.builds.aggregate([{ $match: {} }, { $out: "builds_backup" }]);
 
-// 12. Drop collection
-// Deletes the 'gaming_builds' collection entirely
-db.gaming_builds.drop();
+    // 11. Partial collection backup (by criterion)
+    // Creates a backup containing only 'Gaming' builds
+    db.gaming_builds.drop();
+    db.builds.aggregate([{ $match: { usage_type: "Gaming" } }, { $out: "gaming_builds" }]);
 
-// 13. Partial data deletion (deleteMany with criterion)
-// Create a temporary collection first
-db.demo_ops.drop();
-db.components.aggregate([{ $match: { type: "CPU" } }, { $out: "demo_ops" }]);
+    // 12. Drop collection
+    // Deletes the 'gaming_builds' collection entirely
+    db.gaming_builds.drop();
 
-// Deletes only CPUs cheaper than $200 from the demo collection
-db.demo_ops.deleteMany({ price: { $lt: 200 } });
+    // 13. Partial data deletion (deleteMany with criterion)
+    // Create a temporary collection first
+    db.demo_ops.drop();
+    db.components.aggregate([{ $match: { type: "CPU" } }, { $out: "demo_ops" }]);
 
-// 14. Rename collection and final cleanup
-// Renames 'demo_ops' to 'demo_ops_renamed'
-db.demo_ops.renameCollection("demo_ops_renamed", true);
+    // Deletes only CPUs cheaper than $200 from the demo collection
+    db.demo_ops.deleteMany({ price: { $lt: 200 } });
 
-// Deletes all documents within the renamed collection
-db.demo_ops_renamed.deleteMany({});
+    // 14. Rename collection and final cleanup
+    // Renames 'demo_ops' to 'demo_ops_renamed'
+    db.demo_ops.renameCollection("demo_ops_renamed", true);
 
-// Drops the empty collection
-db.demo_ops_renamed.drop();
+    // Deletes all documents within the renamed collection
+    db.demo_ops_renamed.deleteMany({});
 
-// 15. remove() - Delete using legacy method (required by syllabus)
-// Creates a temporary collection and uses remove()
-db.temp_remove_demo.drop();
-db.components.aggregate([
-    { $match: { type: "Power Supply" } },
-    { $limit: 3 },
-    { $out: "temp_remove_demo" }
-]);
+    // Drops the empty collection
+    db.demo_ops_renamed.drop();
 
-// Explicitly using 'remove' as requested in the requirements
-db.temp_remove_demo.remove({ "specs.wattage": { $lt: 700 } })
+    // 15. remove() - Delete using legacy method (required by syllabus)
+    // Creates a temporary collection and uses remove()
+    db.temp_remove_demo.drop();
+    db.components.aggregate([
+        { $match: { type: "Power Supply" } },
+        { $limit: 3 },
+        { $out: "temp_remove_demo" }
+    ]);
 
-db.temp_remove_demo.drop();
+    // Explicitly using 'remove' as requested in the requirements
+    db.temp_remove_demo.remove({ "specs.wattage": { $lt: 700 } })
+
+    db.temp_remove_demo.drop();
+
+} // end section5_updatesAndDeletes()
 
 // ============================================================
 // Section 6: Interactive PC Builder (Incremental Selection)
@@ -2105,15 +2116,23 @@ function pcBuilderHelp() {
 
 
 // ============================================================
-// Load Message
+// Load Message — prints available commands on load()
 // ============================================================
 
 print("");
-print("  ╔════════════════════════════════════════════════════╗");
-print("  ║  ✓ Interactive PC Builder loaded!                  ║");
-print("  ║    pcBuilderHelp()           Full command list     ║");
-print("  ║    startBuild(1500, 'gaming')  Start building!       ║");
-print("  ╚════════════════════════════════════════════════════╝");
+print("  ╔════════════════════════════════════════════════════════════╗");
+print("  ║  ✓ project.js loaded — data seeded, functions ready.        ║");
+print("  ║                                                            ║");
+print("  ║  Run manually:                                             ║");
+print("  ║    section4_queries()             Search & Retrieval        ║");
+print("  ║    section5_updatesAndDeletes()   Updates & Deletes         ║");
+print("  ║    section6_marketAnalysis()      Aggregation Pipeline      ║");
+print("  ║    section6_manufacturerBreakdown()                         ║");
+print("  ║    startBuild(1500, 'gaming')     Interactive Builder       ║");
+print("  ║    section7_mapReduce()           MapReduce Analysis        ║");
+print("  ║    section7_manufacturerStats()                             ║");
+print("  ║    section7_ratingDistribution()                            ║");
+print("  ╚════════════════════════════════════════════════════════════╝");
 print("");
 
 // ============================================================
@@ -2393,9 +2412,13 @@ function section7_ratingDistribution() {
     return db.rating_distribution.find().toArray();
 }
 
-// Recommended manual run order by section:
-// 1) (already ran above) setup + insertMany/insertOne
-// 2) section4_findAndQuery()
-// 3) section5_updatesAndDeletes()
-// 4) section6_aggregate() or buildComputerByBudget(<budget>)
-// 5) section7_mapReduce()
+// Recommended manual run order:
+// 1) load("project.js")                → Automatically loads data, creates collections, seeds builds & users
+// 2) section4_queries()              → Search and Retrieval (11 queries)
+// 3) section5_updatesAndDeletes()    → Updates & Deletes (15 operations)
+// 4) section6_marketAnalysis()       → Aggregation: Market Analysis
+//    section6_manufacturerBreakdown()→ Aggregation: Manufacturer Breakdown
+//    startBuild(1500, 'gaming')      → Interactive PC Builder
+// 5) section7_mapReduce()            → MapReduce: Best Builds Per Tier
+//    section7_manufacturerStats()    → MapReduce: Manufacturer Stats
+//    section7_ratingDistribution()   → MapReduce: Rating Distribution
