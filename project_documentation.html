@@ -171,7 +171,7 @@
 
 <table>
 <tbody><tr><th>#</th><th>שם השאילתה</th><th>פקודות MongoDB</th><th>מה מדגימה</th></tr>
-<tr><td>1</td><td>Simple Query + Projection + Limit</td><td><code>find({...}, {projection}).limit(2)</code></td><td>שליפת מעבדים עם ציון מעל 30,000. Projection מסתיר את ה-<code>_id</code> ומציג רק name, price, score</td></tr>
+<tr><td>1</td><td>Simple Query + Projection + Limit</td><td><code>find({...}, {projection}).limit(2)</code></td><td>שליפת מעבדים עם ציון מעל 2,000. Projection מסתיר את ה-<code>_id</code> ומציג רק name, price, score</td></tr>
 <tr><td>2</td><td>Embedded Document Query</td><td><code>find({"orders.items.type": "GPU"})</code></td><td>גישה למערכים מקוננים (Nested Arrays) באמצעות Dot Notation — מוצאת משתמשים שהזמינו כרטיס מסך</td></tr>
 <tr><td>3</td><td>Referenced Data Query</td><td><code>findOne</code> → <code>find({parts: gpuDoc._id})</code></td><td>שליפה דו-שלבית: קודם מוצאים את ה-ID של RTX 4090 מתוך components, ואז מחפשים builds שמכילים אותו. מדגים עבודה עם Referenced Data</td></tr>
 <tr><td>4</td><td>Sort + Skip + Limit + toArray</td><td><code>find().sort({price:-1}).skip(2).limit(3).toArray()</code></td><td>שרשור פקודות: מציג לוחות-אם מהיקרים, מדלג על 2 הראשונים, לוקח 3 הבאים, וממיר למערך JavaScript</td></tr>
