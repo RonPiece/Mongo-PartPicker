@@ -39,13 +39,18 @@ db.createCollection("users")
 // Prefer absolute path derived from USERPROFILE, with a relative fallback.
 var __mppRepo = null;
 try {
-    if (typeof process !== "undefined" && process.env && process.env.USERPROFILE) {
-        // Modified to work on user's machine, but now made more dynamic using pwd()
-        __mppRepo = (typeof pwd === "function") ? pwd() : "c:/Users/user/source/repos/MongopPcPartPicker";
+    // If we're loading this script from an absolute path (via load("C:/...")),
+    // get the directory of the currently executing script
+    var path = require('path');
+    var scriptDir = path.dirname(__filename);
+    if (scriptDir) {
+        __mppRepo = scriptDir;
         globalThis.__MPP_REPO_ROOT__ = __mppRepo;
     }
 } catch (e) {
-    // ignore
+    // Fallback: Hardcode the directory to make the load work for the professor
+    __mppRepo = "C:/Users/Ron/Documents/GitHub/Mongo-PartPicker";
+    globalThis.__MPP_REPO_ROOT__ = __mppRepo;
 }
 
 var __mppLoadedData = false;
@@ -544,9 +549,9 @@ function getRamCount() {
 function section4_queries() {
 
     // 1. Simple query with Projection and use of limit
-    // Finds CPUs with a score higher than 30,000 and shows only name, price, and score
+    // Finds CPUs with a score higher than 2,000 and shows only name, price, and score
     db.components.find(
-        { type: "CPU", "specs.score": { $gt: 30000 } },
+        { type: "CPU", "specs.score": { $gt: 2000 } },
         { name: 1, price: 1, "specs.score": 1, _id: 0 }
     ).limit(2)
 

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<!-- saved from url=(0111)file:///C:/Users/user/.gemini/antigravity/brain/c6a17e88-21a4-424d-ad4c-f4a3d9d0fe1e/project_documentation.html -->
+<html dir="rtl" lang="he"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<style>
+  body {
+    font-family: 'David', 'Times New Roman', serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    direction: rtl;
+    text-align: right;
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px;
+  }
+  h2 {
+    font-size: 16pt;
+    font-weight: bold;
+    margin-top: 30px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 5px;
+  }
+  h3 {
+    font-size: 13pt;
+    font-weight: bold;
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 11pt;
+    direction: rtl;
+  }
+  th, td {
+    border: 1px solid #000;
+    padding: 5px 8px;
+    text-align: right;
+    vertical-align: top;
+  }
+  th {
+    background-color: #e0e0e0;
+    font-weight: bold;
+  }
+  code {
+    font-family: 'Courier New', monospace;
+    direction: ltr;
+    unicode-bidi: embed;
+    background-color: #f0f0f0;
+    padding: 1px 4px;
+    font-size: 10pt;
+  }
+  .code-block {
+    background-color: #f5f5f5;
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin: 10px 0;
+    font-family: 'Courier New', monospace;
+    direction: ltr;
+    text-align: left;
+    font-size: 10pt;
+    white-space: pre-wrap;
+  }
+  ul { margin: 5px 0; padding-right: 25px; }
+  li { margin-bottom: 4px; }
+  .bold { font-weight: bold; }
+  .underline { text-decoration: underline; }
+  hr { border: none; border-top: 2px solid #000; margin: 25px 0; }
+</style>
+</head>
+<body>
+
+<!-- ==================== סעיף 5: פונקציות JavaScript ==================== -->
+
+<h2>5. סעיף 3: פונקציות JavaScript — עיבוד, חישובים ולוגיקה עסקית</h2>
+
+<p>סעיף זה מכיל את כל הפונקציות שנכתבו ב-JavaScript ומשמשות את המערכת לאורך כל הפרויקט. הפונקציות מחולקות לקטגוריות לפי ייעודן.</p>
+
+<h3>5.1 פונקציות ETL (בקובץ data.js)</h3>
+<p>פונקציות אלו אחראיות על תהליך ה-Transform — המרת הנתונים הגולמיים מ-JSON למבנה הפולימורפי של MongoDB.</p>
+
+<table>
+<tbody><tr><th>פונקציה</th><th>תיאור</th><th>דוגמה</th></tr>
+<tr><td><code>detectCpuSocket(cpuName)</code></td><td>זיהוי אוטומטי של סוג Socket מתוך שם המעבד באמצעות Regex. מזהה 15+ דפוסים שונים (LGA1700, AM5 וכו')</td><td>"Intel Core i9-14900K" → "LGA1700"</td></tr>
+<tr><td><code>cpuToComponent(raw)</code></td><td>ממיר אובייקט CPU גולמי למבנה הפולימורפי. מחשב <code>score = cores×100 + base_clock×50</code></td><td>אובייקט גולמי → מסמך MongoDB מוכן</td></tr>
+<tr><td><code>gpuToComponent(raw)</code></td><td>ממיר GPU גולמי. מחלץ chipset, vram, length_mm לצורך בדיקות תאימות מארז</td><td>כולל חישוב <code>score = vram × 200</code></td></tr>
+<tr><td><code>motherboardToComponent(raw)</code></td><td>ממיר לוח-אם. כולל <code>inferMotherboardRamType</code> שקובע DDR4/DDR5 לפי socket</td><td>AM5 → DDR5, LGA1200 → DDR4</td></tr>
+<tr><td><code>ramToComponent(raw)</code></td><td>ממיר זיכרון RAM. מנרמל שם לפורמט אחיד (שם + DDR + מהירות)</td><td></td></tr>
+<tr><td><code>storageToComponent(raw)</code></td><td>ממיר אחסון. מנרמל קיבולת (2000GB → "2TB")</td><td></td></tr>
+<tr><td><code>cpuCoolerToComponent(raw)</code></td><td>ממיר מקרר. מחלץ סוג (Air/Liquid), רעש, RPM</td><td></td></tr>
+<tr><td><code>psuToComponent(raw)</code></td><td>ממיר ספק כח. מחלץ הספק, דירוג יעילות</td><td></td></tr>
+<tr><td><code>normalizeSpaces(s)</code></td><td>ניקוי רווחים כפולים מטקסט</td><td></td></tr>
+<tr><td><code>safeNumber(value, fallback)</code></td><td>המרה בטוחה למספר עם ערך ברירת מחדל</td><td></td></tr>
+</tbody></table>
+
+<p><span class="bold">רציונל:</span> כל פונקציית Transformer מייצרת מסמך אחיד עם שדות <code>type</code>, <code>name</code>, <code>manufacturer</code>, <code>price</code>, <code>specs</code> ו-<code>requirements</code>. כך ניתן לשמור 8 סוגי רכיבים שונים באוסף אחד (Polymorphic Pattern) תוך שמירה על יכולת שליפה אחידה.</p>
+
+
+<h3>5.2 פונקציות עזר לטעינת נתונים (בקובץ project.js)</h3>
+<p>פונקציות אלו משמשות את תהליך ה-Seed (זריעת הנתונים) בעת טעינת הפרויקט:</p>
+
+<table>
+<tbody><tr><th>פונקציה</th><th>תיאור</th></tr>
+<tr><td><code>batchInsert(arr, batchSize)</code></td><td>פונקציית עזר להכנסת מערכים גדולים בקבוצות (batch) של 1000 מסמכים, למניעת חריגת זיכרון</td></tr>
+<tr><td><code>pickGpuIdByChipset(manufacturer, chipset)</code></td><td>מחפשת את ה-GPU הזול ביותר לפי יצרן וצ'יפסט, מחזירה ObjectId</td></tr>
+<tr><td><code>pickCheapestId(type, query)</code></td><td>מחפשת את הרכיב הזול ביותר מסוג נתון</td></tr>
+<tr><td><code>pickPsuId(minWattage)</code></td><td>מחפשת ספק כח עם הספק מינימלי, כולל fallback</td></tr>
+<tr><td><code>ensureBuildHasAllParts(parts, buildName)</code></td><td>מוודאת שלמפרט יש בדיוק 8 רכיבים (כל הסוגים הנדרשים). אם חסר רכיב — ממלאת אותו אוטומטית</td></tr>
+<tr><td><code>compactArray(arr)</code></td><td>מסירה ערכי null ממערך (מונעת שגיאות כשרכיב לא נמצא)</td></tr>
+</tbody></table>
+
+
+<h3>5.3 פונקציות שליפה (Section 3)</h3>
+
+<table>
+<tbody><tr><th>פונקציה</th><th>תיאור</th><th>פקודות MongoDB</th></tr>
+<tr><td><code>getCheapCpuNames(limit)</code></td><td>מחזירה מערך שמות של המעבדים הזולים ביותר. כוללת fallback אם אין מחירים מספריים</td><td>find, sort, limit, forEach</td></tr>
+<tr><td><code>findInBudget(min, max)</code></td><td>מחפשת רכיבים בטווח מחירים נתון</td><td>find עם $gte + $lte</td></tr>
+<tr><td><code>getRamCount()</code></td><td>סופרת את מספר יחידות ה-RAM בקטלוג</td><td>count() + countDocuments() fallback</td></tr>
+</tbody></table>
+
+
+<h3>5.4 פונקציות ציון ביצועים וחישוב תאימות</h3>
+
+<table>
+<tbody><tr><th>פונקציה</th><th>מה מחשבת</th><th>נוסחה / לוגיקה</th></tr>
+<tr><td><code>getProfileParams(usageType)</code></td><td>מחזירה פרמטרים עבור פרופיל שימוש: gaming, workstation, budget, enthusiast</td><td>כל פרופיל מגדיר: יחסי הקצאת תקציב לכל רכיב (cpuCap, gpuCap...), טווח RAM מינימלי/מקסימלי, ומשקלות ציון (למשל ל-gaming: <code>gpu:0.6, cpu:0.4, ram:0.0</code>)</td></tr>
+<tr><td><code>calculateWeightedScore(cpu, gpu, ram, weights)</code></td><td>ציון ביצועים משוקלל</td><td><code>cpuScore × weights.cpu + gpuScore × weights.gpu + ramCapacity × weights.ram</code></td></tr>
+<tr><td><code>calculateRequiredWatts(cpuTdp, gpuVram, cpuScore)</code></td><td>דרישת הספק מינימלית לספק כח</td><td><code>(effectiveCPU + gpuVram×20) × 1.25 + 50W</code> מרווח. מתקנת TDP רשמי מטעה (i9-12900F רשום 65W אבל שואב 200W+ בפועל)</td></tr>
+<tr><td><code>getCoolerReserve(tdp, cpuScore)</code></td><td>מחיר מינימלי למקרר בהתאם ל-TDP</td><td>TDP ≥150W→$80, ≥125W→$60, ≥95W→$40, &gt;65W→$25, אחרת→$15</td></tr>
+<tr><td><code>caseSupportsMotherboard(caseForm, moboForm)</code></td><td>בדיקת תאימות Form Factor: האם המארז תומך בלוח-האם?</td><td>היררכיית גדלים: Full Tower &gt; ATX &gt; MicroATX &gt; Mini ITX. מארז ATX לא מכיל EATX, מארז Mini ITX מתאים רק ל-Mini ITX</td></tr>
+</tbody></table>
+
+<p><span class="bold">רציונל פונקציות הציון:</span> בעולם האמיתי, מעבדים רבים רושמים TDP נמוך (65W) אך צורכים 200W+ בפועל. הפונקציה <code>calculateRequiredWatts</code> משתמשת ב-score כגורם מתקן: מעבד עם ציון מעל 1500 מקבל TDP אפקטיבי של 150W לפחות, ומעבד עם ציון מעל 2000 מקבל 200W. כך מובטח שספק הכח יספיק בפועל.</p>
+
+
+<h3>5.5 מערכת ה-Tier — דירוג איכות מבוסס מחיר</h3>
+<p>המערכת כוללת מנגנון Tier חכם שמבטיח שמפרט יקר לא ילווה ברכיבי תמיכה זולים ולא מתאימים:</p>
+
+<table>
+<tbody><tr><th>פונקציה</th><th>תיאור</th></tr>
+<tr><td><code>getTierBoundaries(type)</code></td><td>מחשבת גבולות Tier דינמיים לפי אחוזוני מחיר ב-DB:<br>Entry (0–25%), Mid (25–60%), High (60–85%), Enthusiast (85%+)<br>משתמשת ב-aggregate עם <code>$arrayElemAt</code> ו-<code>$floor</code></td></tr>
+<tr><td><code>priceTier(price, bounds)</code></td><td>מחזירה מספר Tier (1–4) לפי מחיר וגבולות</td></tr>
+<tr><td><code>tierToFloor(minTier, bounds)</code></td><td>מחזירה מחיר מינימלי (רצפה) עבור Tier נתון</td></tr>
+</tbody></table>
+
+<p><span class="bold">רציונל:</span> בלי מנגנון ה-Tier, מפרט בתקציב $4000 עלול לקבל ספק כח של $30 או מקרר של $15 — רכיבים נמוכי איכות שלא מתאימים למערכת יוקרתית. ה-<code>buildTier</code> נקבע לפי הטיר של ה-CPU (הרכיב הראשון שנבחר) ומשפיע על המחיר המינימלי של כל שאר הרכיבים.</p>
+
+
+<h3>5.6 פונקציות עזר נוספות</h3>
+
+<table>
+<tbody><tr><th>פונקציה</th><th>תיאור</th></tr>
+<tr><td><code>getMinCosts()</code></td><td>שואלת את ה-DB פעם אחת (aggregate עם <code>$group</code> + <code>$min</code>) למחיר המינימלי לכל סוג רכיב. תוצאה נשמרת ב-cache</td></tr>
+<tr><td><code>futureReserve(types)</code></td><td>מחשבת כמה כסף לשריין עבור רכיבים עתידיים. משתמשת ב-<code>getMinCosts</code> אך מתקנת: עבור מקרר — שורינת לפי TDP, עבור ספק כח — שורינת לפי דרישת הספק</td></tr>
+<tr><td><code>printComponentList(results, columns)</code></td><td>מדפיסה טבלה מפורמטת של רכיבים עם עמודות דינמיות</td></tr>
+<tr><td><code>validateAndSave(index, key, newStep)</code></td><td>מאמתת בחירת רכיב: בודקת שהאינדקס חוקי, שלא חורגים מ-110% מהתקציב, ושומרת את הבחירה</td></tr>
+<tr><td><code>padRight, padLeft, formatPrice, truncate</code></td><td>פונקציות עיצוב טקסט לתצוגה נאה בטרמינל</td></tr>
+</tbody></table>
+
+
+<hr>
+
+<!-- ==================== סעיף 6: שאילתות חיפוש ==================== -->
+
+<h2>6. סעיף 4: שאילתות חיפוש ושליפה — <code>section4_queries()</code></h2>
+
+<p>סעיף זה מכיל 11 שאילתות חיפוש המדגימות מגוון רחב של יכולות MongoDB:</p>
+
+<table>
+<tbody><tr><th>#</th><th>שם השאילתה</th><th>פקודות MongoDB</th><th>מה מדגימה</th></tr>
+<tr><td>1</td><td>Simple Query + Projection + Limit</td><td><code>find({...}, {projection}).limit(2)</code></td><td>שליפת מעבדים עם ציון מעל 30,000. Projection מסתיר את ה-<code>_id</code> ומציג רק name, price, score</td></tr>
+<tr><td>2</td><td>Embedded Document Query</td><td><code>find({"orders.items.type": "GPU"})</code></td><td>גישה למערכים מקוננים (Nested Arrays) באמצעות Dot Notation — מוצאת משתמשים שהזמינו כרטיס מסך</td></tr>
+<tr><td>3</td><td>Referenced Data Query</td><td><code>findOne</code> → <code>find({parts: gpuDoc._id})</code></td><td>שליפה דו-שלבית: קודם מוצאים את ה-ID של RTX 4090 מתוך components, ואז מחפשים builds שמכילים אותו. מדגים עבודה עם Referenced Data</td></tr>
+<tr><td>4</td><td>Sort + Skip + Limit + toArray</td><td><code>find().sort({price:-1}).skip(2).limit(3).toArray()</code></td><td>שרשור פקודות: מציג לוחות-אם מהיקרים, מדלג על 2 הראשונים, לוקח 3 הבאים, וממיר למערך JavaScript</td></tr>
+<tr><td>5</td><td>forEach</td><td><code>find().limit(3).forEach(function(doc){...})</code></td><td>שימוש בלולאה לביצוע פעולה (הדפסה) על כל מסמך בתוצאה</td></tr>
+<tr><td>6</td><td>$or + $regex</td><td><code>find({$or: [{name: {$regex: "ASUS"}}, ...]})</code></td><td>חיפוש טקסט חופשי (Text Search) עם אופרטור OR — מארזים של ASUS או MSI</td></tr>
+<tr><td>7</td><td>count</td><td><code>db.components.count({})</code></td><td>ספירת כל המסמכים בקטלוג</td></tr>
+<tr><td>8</td><td>$in</td><td><code>find({type: {$in: ["CPU","GPU"]}})</code></td><td>שליפת מספר סוגים בו-זמנית ללא שימוש ב-$or</td></tr>
+<tr><td>9</td><td>$exists + Array Index</td><td><code>find({"reviews.0": {$exists: true}})</code></td><td>בדיקה שמערך הביקורות קיים ולא ריק (גישה לאינדקס 0)</td></tr>
+<tr><td>10</td><td>cursor.count() (Legacy)</td><td><code>find({...}).count()</code></td><td>שימוש בפקודת count() ישנה (deprecated) — נדרש על פי הסילבוס</td></tr>
+<tr><td>11</td><td>$and + Range Query</td><td><code>find({$and: [{type:"GPU"}, {price:{$gte:300}}, {price:{$lte:800}}]})</code></td><td>שילוב אופרטורים לוגיים עם טווח מחירים</td></tr>
+</tbody></table>
+
+
+<hr>
+
+<!-- ==================== סעיף 7: עדכונים ומחיקות ==================== -->
+
+<h2>7. סעיף 5: עדכונים ומחיקות — <code>section5_updatesAndDeletes()</code></h2>
+
+<p>סעיף זה מכיל 15 פעולות עדכון ומחיקה המדגימות את כל סוגי הפקודות הנדרשות:</p>
+
+<table>
+<tbody><tr><th>#</th><th>פקודה</th><th>מה עושה</th><th>הסבר</th></tr>
+<tr><td>1</td><td><code>$set</code></td><td>updateOne — מעדכן ציון ומוסיף שדה is_featured</td><td>מדגים עדכון שדות קיימים והוספת שדות חדשים</td></tr>
+<tr><td>2</td><td><code>$push</code></td><td>updateOne — מוסיף ביקורת חדשה למערך reviews</td><td>מדגים הוספת אלמנט למערך מוטמע</td></tr>
+<tr><td>3</td><td><code>$pull</code></td><td>updateOne — מסיר ביקורת ספציפית מהמערך</td><td>מדגים הסרת אלמנט ממערך לפי תנאי (ניקוי אחרי הדגמת $push)</td></tr>
+<tr><td>4</td><td><code>updateMany</code></td><td>מוסיף <code>in_stock: true</code> לכל הרכיבים</td><td>מדגים עדכון המוני (Bulk)</td></tr>
+<tr><td>5</td><td><code>$inc</code></td><td>updateMany — מעלה מחיר ב-$10 לכל מוצרי NVIDIA</td><td>מדגים חישוב מתמטי (Increment)</td></tr>
+<tr><td>—</td><td><code>$inc</code> (revert)</td><td>updateMany — מוריד מחיר ב-$10</td><td>שחזור המצב המקורי לשמירת שלמות הנתונים</td></tr>
+<tr><td>6</td><td><code>$addToSet</code></td><td>updateOne — מוסיף תגית "Best Seller"</td><td>מדגים הוספה למערך ללא כפילויות</td></tr>
+<tr><td>7</td><td><code>$pop</code></td><td>updateOne — מסיר את האלמנט האחרון מ-price_history</td><td>מדגים הסרה מקצה מערך</td></tr>
+<tr><td>8</td><td><code>$unset</code></td><td>updateOne — מוחק לגמרי את שדה is_featured</td><td>מדגים הסרת שדה שלם מהמסמך</td></tr>
+<tr><td>—</td><td><code>$set</code> (restore)</td><td>updateOne — משחזר ציון מקורי</td><td>שחזור הציון ששינינו בפקודה 1 (1575 = 14 cores × 100 + 3.5GHz × 50)</td></tr>
+<tr><td>9</td><td><code>deleteOne</code></td><td>insertOne + deleteOne</td><td>הכנסת מסמך זמני ומחיקתו — מדגים מחיקה בודדת</td></tr>
+<tr><td>10</td><td><code>$out</code> (backup)</td><td><code>aggregate([{$match:{}}, {$out:"builds_backup"}])</code></td><td>גיבוי מלא של אוסף builds לאוסף חדש (שכפול מלא)</td></tr>
+<tr><td>11</td><td><code>$out</code> (partial)</td><td><code>aggregate([{$match:{usage_type:"Gaming"}}, {$out}])</code></td><td>גיבוי חלקי לפי קריטריון (רק מפרטי Gaming)</td></tr>
+<tr><td>12</td><td><code>drop</code></td><td><code>db.gaming_builds.drop()</code></td><td>מחיקת אוסף שלם</td></tr>
+<tr><td>13</td><td><code>deleteMany</code></td><td><code>deleteMany({price: {$lt: 200}})</code></td><td>מחיקה חלקית לפי תנאי מחיר</td></tr>
+<tr><td>14</td><td><code>renameCollection</code></td><td><code>renameCollection("demo_ops_renamed")</code></td><td>שינוי שם אוסף + deleteMany + drop (ניקוי)</td></tr>
+<tr><td>15</td><td><code>remove()</code> (Legacy)</td><td><code>db.temp_remove_demo.remove({...})</code></td><td>שימוש בפקודת remove ישנה — נדרש על פי הסילבוס</td></tr>
+</tbody></table>
+
+
+<hr>
+
+<!-- ==================== סעיף 8: אגרגציה ==================== -->
+
+<h2>8. סעיף 6: צינורות אגרגציה — Interactive PC Builder ואנליטיקה</h2>
+
+<p>סעיף 6 הוא הלב של הפרויקט ומכיל מערכת אינטראקטיבית מתקדמת להרכבת מפרט מחשב, לצד שני צינורות אנליטיים.</p>
+
+
+<h3>8.1 Pipeline #1: Interactive PC Builder — בניית מחשב אינטראקטיבית</h3>
+<p>המערכת מאפשרת למשתמש לבנות מפרט מחשב מלא בשמונה שלבים, כאשר בכל שלב מוצגים רק רכיבים תואמים ותקציביים:</p>
+
+<p><span class="bold underline">שלבי הבנייה:</span></p>
+<table>
+<tbody><tr><th>שלב</th><th>רכיב</th><th>טכניקת MongoDB</th><th>לוגיקה מיוחדת</th></tr>
+<tr><td>1</td><td>CPU</td><td>Section 6: <code>aggregate</code> עם <code>$match</code>, <code>$project</code>, <code>$sort</code>, <code>$limit</code></td><td>סינון רק Sockets מודרניים (AM4, AM5, LGA1700...)</td></tr>
+<tr><td>2</td><td>Motherboard</td><td>Section 6: <code>$lookup</code> Self-Join + <code>$unwind</code> + <code>$match</code> + <code>$project</code></td><td>Tier Enforcement: לוח-אם חייב להיות בטווח ±1 Tier מה-CPU</td></tr>
+<tr><td>3</td><td>RAM</td><td>Section 4: <code>find().sort().limit()</code></td><td>סינון DDR4/DDR5 אוטומטי לפי לוח-האם. סינון ECC/Server RAM</td></tr>
+<tr><td>4</td><td>GPU</td><td>Section 4: <code>find</code> עם סינון ציון וגודל</td><td>דורש <code>length_mm</code> — בלי זה שלב המארז לא יכול לבדוק התאמה. Surplus Tax: 70% מהחיסכון בשלבים קודמים</td></tr>
+<tr><td>5</td><td>Storage</td><td>Section 4: <code>find</code> עם סינון סוג</td><td>SSD בלבד כאחסון ראשי. טווח קיבולת לפי פרופיל</td></tr>
+<tr><td>6</td><td>CPU Cooler</td><td>Section 4: <code>find</code> עם סינון TDP</td><td>חסימת מקררים Low-Profile למעבדים חזקים. מגבלת radiator למארזים קטנים</td></tr>
+<tr><td>7</td><td>PSU</td><td>Section 3: <code>calculateRequiredWatts()</code> + find</td><td>Tier Enforcement: ספק כח חייב להתאים לטיר ה-GPU</td></tr>
+<tr><td>8</td><td>Case</td><td>Section 6: <code>aggregate</code> עם <code>$subtract</code></td><td>בדיקת GPU clearance (מקום פיזי). בדיקת Form Factor תאימות</td></tr>
+</tbody></table>
+
+<p><span class="bold underline">שלב ה-$lookup (Self-Join) — הסבר מפורט:</span></p>
+<p>בשלב הלוח-אם, המערכת מבצעת <code>$lookup</code> Self-Join: היא מחפשת <span class="bold">באותו אוסף</span> (<code>components</code>) לוחות-אם שה-socket שלהם תואם ל-socket של המעבד שנבחר:</p>
+
+<table>
+<tbody><tr><th>Stage</th><th>פקודה</th><th>מה עושה</th></tr>
+<tr><td>1</td><td><code>$match</code></td><td>מוצא את המעבד שנבחר לפי _id</td></tr>
+<tr><td>2</td><td><code>$lookup</code></td><td>Self-Join: <code>from: "components"</code>, <code>localField: "requirements.socket_match"</code>, <code>foreignField: "specs.socket"</code> — מצרף רכיבים עם אותו socket</td></tr>
+<tr><td>3</td><td><code>$unwind</code></td><td>שוטח את מערך התוצאות (<code>socket_matches</code>) — כל התאמה הופכת למסמך נפרד</td></tr>
+<tr><td>4</td><td><code>$match</code></td><td>מסנן רק לוחות-אם (type = "Motherboard") בטווח מחירים ועם <code>ram_type</code> תקין</td></tr>
+<tr><td>5</td><td><code>$project</code></td><td>מעצב את התוצאה לפורמט אחיד (שם, מחיר, מפרטים)</td></tr>
+<tr><td>6-7</td><td><code>$sort</code> + <code>$limit</code></td><td>ממיין לפי מחיר (זול קודם), מגביל ל-30</td></tr>
+</tbody></table>
+
+<p><span class="bold underline">לוגיקת הקצאת תקציב דינמית:</span></p>
+<p>בכל שלב, המערכת מחשבת:</p>
+<ul>
+<li><code>maxPrice = min(budget × profileCap, availableBudget - futureReserve)</code></li>
+<li><code>futureReserve</code> = סכום העלויות המינימליות של כל הרכיבים שעוד לא נבחרו</li>
+</ul>
+<p>כך מובטח שתמיד יישאר מספיק תקציב לרכיבים הנותרים.</p>
+
+<p><span class="bold underline">מנגנון Tier Enforcement:</span></p>
+<ul>
+<li>ה-<code>buildTier</code> נקבע לפי הטיר של ה-CPU (הרכיב הראשון)</li>
+<li>כל רכיב עוקב מקבל רצפת מחיר מינימלית: <code>tierToFloor(buildTier - 1, tierBounds)</code></li>
+<li>לדוגמה: אם ה-CPU הוא Tier "High" (טיר 3), כל רכיב תמיכה חייב להיות Tier "Mid" (טיר 2) לפחות</li>
+<li>מנגנון Fallback: אם התקציב לא מספיק לטיר הנדרש, המערכת יורדת טיר ומדפיסה אזהרה</li>
+</ul>
+
+<p><span class="bold underline">שלב הסיום (finalizeBuild):</span></p>
+<ul>
+<li>Section 3: מחשב <code>calculateWeightedScore</code></li>
+<li>Section 4: <code>insertOne</code> — שומר את המפרט ב-<code>recommended_combos</code></li>
+<li>Section 6: aggregate עם <code>$add</code> — MongoDB מחשב את סכום המחירים באופן עצמאי (אימות)</li>
+<li>Section 6: <code>$out</code> — שומר את התוצאה בחזרה ל-<code>recommended_combos</code></li>
+</ul>
+
+
+<h3>8.2 Pipeline #2: Market Analysis — <code>section6_marketAnalysis()</code></h3>
+<p>צינור אגרגציה שמייצר סטטיסטיקות שוק מלאות:</p>
+
+<table>
+<tbody><tr><th>Stage</th><th>פקודה</th><th>מה עושה</th></tr>
+<tr><td>1</td><td><code>$match</code></td><td>מסנן רכיבים עם מחיר מספרי חיובי</td></tr>
+<tr><td>2</td><td><code>$group</code></td><td>מקבץ לפי <code>type</code>. מחשב: count (<code>$sum</code>), avg_price (<code>$avg</code>), min_price (<code>$min</code>), max_price (<code>$max</code>)</td></tr>
+<tr><td>3</td><td><code>$project</code></td><td>מוסיף <code>est_market_value = $round($multiply(count, avg_price))</code>. מעגל avg_price ל-2 ספרות</td></tr>
+<tr><td>4</td><td><code>$sort</code></td><td>ממיין לפי count (יורד)</td></tr>
+</tbody></table>
+
+<p><span class="bold">פלט:</span> טבלה עם סטטיסטיקות מחיר לכל סוג רכיב — כמות, ממוצע, מינימום, מקסימום, ואומדן שווי שוק.</p>
+
+
+<h3>8.3 Pipeline #3: Manufacturer Breakdown — <code>section6_manufacturerBreakdown()</code></h3>
+<p>צינור אגרגציה מורכב עם <span class="bold">שתי שכבות $group</span>:</p>
+
+<table>
+<tbody><tr><th>Stage</th><th>פקודה</th><th>מה עושה</th></tr>
+<tr><td>1</td><td><code>$match</code></td><td>מסנן רכיבים עם יצרן ומחיר תקינים</td></tr>
+<tr><td>2</td><td><code>$group</code> (ראשון)</td><td>מקבץ לפי {manufacturer, type}. מחשב: <code>product_count ($sum)</code>, <code>avg_price ($avg)</code>, <code>products ($push)</code></td></tr>
+<tr><td>3</td><td><code>$group</code> (שני)</td><td>מקבץ שוב לפי manufacturer. מחשב: <code>total_products ($sum)</code>, <code>categories ($push)</code>, <code>first_category ($first)</code></td></tr>
+<tr><td>4</td><td><code>$sort</code></td><td>ממיין לפי total_products (יורד)</td></tr>
+<tr><td>5</td><td><code>$limit</code></td><td>מגביל ל-15 יצרנים</td></tr>
+</tbody></table>
+
+<p><span class="bold">פלט:</span> פריסת מוצרים לפי יצרן, כולל חלוקה לקטגוריות ומחיר ממוצע בכל קטגוריה.</p>
+
+
+<hr>
+
+<!-- ==================== סעיף 9: MapReduce ==================== -->
+
+<h2>9. סעיף 7: MapReduce — ניתוחים סטטיסטיים</h2>
+
+<p>סעיף זה מכיל 3 ניתוחי MapReduce שונים:</p>
+
+
+<h3>9.1 MapReduce A: Best Builds Per Tier — <code>section7_mapReduce()</code></h3>
+<p>ניתוח מורכב שמוצא את <span class="bold">המפרט הטוב ביותר בכל טווח מחירים</span>.</p>
+
+<p><span class="bold underline">תהליך העבודה:</span></p>
+<ol>
+<li><span class="bold">שלב ההכנה:</span> מייצר עשרות מפרטים אוטומטיים (<code>buildComputerByBudgetDoc</code>) — מריץ את כל שלבי ה-PC Builder בשקט (ללא הדפסה) עבור 4 פרופילים × n תקציבים</li>
+<li><span class="bold">שלב הגבולות:</span> מחשב Tier Boundaries דינמיים מהמחירים בפועל (לא מהתקציב המבוקש), באמצעות aggregate עם $min ו-$max</li>
+<li><span class="bold">Map:</span> מקבל כל מפרט, קובע לאיזה Tier תקציבי הוא שייך (לפי <code>total_price</code>), ושולח <code>emit(tier, buildData)</code></li>
+<li><span class="bold">Reduce:</span> משווה מפרטים באותו Tier ובוחר את זה עם ה-score הגבוה ביותר (ואם שווה — הזול ביותר)</li>
+<li><span class="bold">Finalize:</span> מעצב את הפלט עם שם הזוכה, ציון, מחיר, ורשימת הרכיבים</li>
+</ol>
+
+<table>
+<tbody><tr><th>רכיב MapReduce</th><th>תיאור</th></tr>
+<tr><td>Map Function</td><td><code>mapBudgetTier</code> — מחלק לטיירים דינמיים לפי <code>total_price</code>. משתמש ב-scope variable (<code>_tierBounds_</code>)</td></tr>
+<tr><td>Reduce Function</td><td><code>reduceBestBuild</code> — בוחר את הציון המקסימלי. ב-tie — בוחר את הזול</td></tr>
+<tr><td>Finalize Function</td><td><code>finalizeBestBuild</code> — מעצב: budget_tier, winner, performance_score, actual_price, components</td></tr>
+<tr><td>Query Filter</td><td><code>{total_price: {$type: "number"}}</code></td></tr>
+<tr><td>Scope</td><td><code>{_tierBounds_: tierBounds}</code> — מעביר את גבולות ה-Tier לתוך פונקציית ה-Map</td></tr>
+<tr><td>Output Collection</td><td><code>best_builds_per_tier</code></td></tr>
+</tbody></table>
+
+
+<h3>9.2 MapReduce B: Manufacturer Stats — <code>section7_manufacturerStats()</code></h3>
+<p>ניתוח סטטיסטי ליצרנים — רק עבור רכיבים שמחירם מעל $200.</p>
+
+<table>
+<tbody><tr><th>רכיב MapReduce</th><th>תיאור</th></tr>
+<tr><td>Map Function</td><td>שולח <code>emit(manufacturer, {count: 1, totalPrice: price})</code></td></tr>
+<tr><td>Reduce Function</td><td>סוכם count ו-totalPrice</td></tr>
+<tr><td>Finalize Function</td><td>מחשב <code>avgPrice = totalPrice / count</code></td></tr>
+<tr><td>Query Filter</td><td><code>{price: {$gt: 200}}</code> — רק רכיבים שמחירם מעל $200</td></tr>
+<tr><td>Output Collection</td><td><code>manufacturer_stats_mr</code></td></tr>
+</tbody></table>
+
+
+<h3>9.3 MapReduce C: Rating Distribution — <code>section7_ratingDistribution()</code></h3>
+<p>ניתוח התפלגות דירוגי ביקורות — כמה ביקורות בכל ציון (1–5 כוכבים).</p>
+
+<table>
+<tbody><tr><th>רכיב MapReduce</th><th>תיאור</th></tr>
+<tr><td>Map Function</td><td>עובר על מערך <code>reviews</code> של כל רכיב, שולח <code>emit(rating, 1)</code> לכל ביקורת</td></tr>
+<tr><td>Reduce Function</td><td><code>Array.sum(values)</code> — סיכום</td></tr>
+<tr><td>Finalize Function</td><td>מעצב: <code>{rating, count}</code></td></tr>
+<tr><td>Query Filter</td><td>אין — עובר על כל הרכיבים (מתעלם מאלו ללא ביקורות)</td></tr>
+<tr><td>Output Collection</td><td><code>rating_distribution</code></td></tr>
+</tbody></table>
+
+
+<hr>
+
+<!-- ==================== סעיף 10: סיכום ==================== -->
+
+<h2>10. סיכום אופרטורים וטכניקות MongoDB שנעשה בהם שימוש</h2>
+
+<table>
+<tbody><tr><th>קטגוריה</th><th>אופרטורים / טכניקות</th></tr>
+<tr><td>שליפה (Section 4)</td><td><code>find</code>, <code>findOne</code>, <code>sort</code>, <code>skip</code>, <code>limit</code>, <code>toArray</code>, <code>forEach</code>, <code>count</code>, <code>$regex</code>, <code>$or</code>, <code>$and</code>, <code>$in</code>, <code>$exists</code>, <code>$gte</code>, <code>$lte</code>, <code>$gt</code>, <code>$lt</code>, <code>$type</code>, Dot Notation, Projection</td></tr>
+<tr><td>עדכון (Section 5)</td><td><code>updateOne</code>, <code>updateMany</code>, <code>$set</code>, <code>$unset</code>, <code>$push</code>, <code>$pull</code>, <code>$pop</code>, <code>$addToSet</code>, <code>$inc</code></td></tr>
+<tr><td>מחיקה (Section 5)</td><td><code>deleteOne</code>, <code>deleteMany</code>, <code>remove</code> (legacy), <code>drop</code>, <code>renameCollection</code></td></tr>
+<tr><td>אגרגציה (Section 6)</td><td><code>aggregate</code>, <code>$match</code>, <code>$group</code>, <code>$project</code>, <code>$sort</code>, <code>$limit</code>, <code>$lookup</code> (Self-Join), <code>$unwind</code>, <code>$out</code></td></tr>
+<tr><td>אופרטורים מתמטיים</td><td><code>$add</code>, <code>$subtract</code>, <code>$multiply</code>, <code>$divide</code>, <code>$round</code>, <code>$floor</code></td></tr>
+<tr><td>Accumulators</td><td><code>$sum</code>, <code>$avg</code>, <code>$min</code>, <code>$max</code>, <code>$push</code>, <code>$first</code>, <code>$arrayElemAt</code></td></tr>
+<tr><td>MapReduce (Section 7)</td><td><code>mapReduce</code>, <code>emit</code>, Map Function, Reduce Function, Finalize Function, <code>scope</code>, <code>query</code>, <code>out</code></td></tr>
+<tr><td>Patterns</td><td>Polymorphic Pattern, Self-Join Lookup, Embedded (reviews, orders), Referenced (parts, saved_builds)</td></tr>
+<tr><td>JavaScript (Section 3)</td><td>30+ פונקציות: ETL Transformers, Regex Socket Detection, Scoring, Tier System, Budget Allocation, Compatibility Checking</td></tr>
+</tbody></table>
+
+
+<hr>
+
+<!-- ==================== סעיף 11: הוראות הרצה ==================== -->
+
+<h2>11. הוראות הרצה</h2>
+
+<p>הרצת הפרויקט מתבצעת בטרמינל mongosh:</p>
+
+<p><span class="bold">שלב 1 — טעינה (אוטומטית):</span></p>
+<div class="code-block">load("project.js")
+// טוען את data.js, יוצר קולקציות, מכניס רכיבים, מפרטים ומשתמשים
+// מדפיס תפריט עם כל הפקודות הזמינות</div>
+
+<p><span class="bold">שלב 2 — שאילתות חיפוש (Section 4):</span></p>
+<div class="code-block">section4_queries()</div>
+
+<p><span class="bold">שלב 3 — עדכונים ומחיקות (Section 5):</span></p>
+<div class="code-block">section5_updatesAndDeletes()</div>
+
+<p><span class="bold">שלב 4 — אגרגציה (Section 6):</span></p>
+<div class="code-block">section6_marketAnalysis()
+section6_manufacturerBreakdown()</div>
+
+<p><span class="bold">שלב 5 — PC Builder אינטראקטיבי (Section 6):</span></p>
+<div class="code-block">startBuild(1500, 'gaming')    // מתחיל בנייה - מציג מעבדים
+pick(3)                       // בוחר מעבד #3 - מציג לוחות-אם
+pick(1)                       // ממשיך לשלב הבא...
+// חוזר עד סיום (8 שלבים)</div>
+
+<p><span class="bold">שלב 6 — MapReduce (Section 7):</span></p>
+<div class="code-block">section7_mapReduce()           // מייצר מפרטים + MapReduce
+section7_manufacturerStats()   // סטטיסטיקות יצרנים
+section7_ratingDistribution()  // התפלגות דירוגים</div>
+
+
+
+</body></html>
