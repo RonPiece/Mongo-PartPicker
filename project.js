@@ -1337,7 +1337,7 @@ function stepMotherboard(cpuIndex) {
 
         // Stage 6-7: $sort + $limit — value first (ASC), wide range
         { $sort: { price: 1 } },
-        { $limit: 30 }
+        { $limit: 15 }
     ]).toArray();
 
     // Tier fallback: if tier-filtered Self-Join returned nothing, drop tier and try basic
@@ -1360,7 +1360,7 @@ function stepMotherboard(cpuIndex) {
             "specs.socket": cpu.specs.socket,
             "specs.ram_type": { $exists: true, $nin: [null, ""] },
             price: { $type: "number" }
-        }).sort({ price: 1 }).limit(10).toArray();
+        }).sort({ price: 1 }).limit(15).toArray();
     }
 
     buildState.lastResults = results;
@@ -1454,7 +1454,7 @@ function stepRAM(moboIndex) {
         }).sort({ price: 1 }).limit(30).toArray().filter(function (r) {
             var n = (r.name || "").toUpperCase();
             return n.indexOf("ECC") < 0 && n.indexOf("RDIMM") < 0 && n.indexOf("LRDIMM") < 0;
-        }).slice(0, 10);
+        }).slice(0, 15);
     }
 
     buildState.lastResults = results;
@@ -1525,7 +1525,7 @@ function stepGPU(ramIndex) {
         results = db.components.find({
             type: "GPU", price: { $type: "number" },
             "specs.length_mm": { $type: "number", $gt: 0 }
-        }).sort({ price: 1 }).limit(10).toArray();
+        }).sort({ price: 1 }).limit(15).toArray();
     }
 
     buildState.lastResults = results;
@@ -1581,14 +1581,14 @@ function stepStorage(gpuIndex) {
         results = db.components.find({
             type: "Storage", price: { $type: "number", $lte: maxPrice },
             "specs.storage_type": { $in: ["SSD", "Hybrid", "260 SSD", "M.2", "NVMe"] }
-        }).sort({ "specs.capacity_gb": -1, price: 1 }).limit(10).toArray();
+        }).sort({ "specs.capacity_gb": -1, price: 1 }).limit(15).toArray();
     }
 
     // Last resort: any storage if no SSDs at all
     if (results.length === 0) {
         results = db.components.find({
             type: "Storage", price: { $type: "number", $lte: maxPrice }
-        }).sort({ price: 1 }).limit(10).toArray();
+        }).sort({ price: 1 }).limit(15).toArray();
     }
 
     buildState.lastResults = results;
@@ -1678,7 +1678,7 @@ function stepCooler(storageIndex) {
         print("  ⚠ No coolers in budget — showing cheapest adequate:");
         results = db.components.find({
             type: "CPU Cooler", price: { $type: "number", $gte: minPrice }
-        }).sort({ price: 1 }).limit(10).toArray();
+        }).sort({ price: 1 }).limit(15).toArray();
     }
 
     buildState.lastResults = results;
@@ -1730,7 +1730,7 @@ function stepPSU(coolerIndex) {
         type: "Power Supply",
         price: { $type: "number", $gte: minPsuPrice, $lte: maxPrice },
         "specs.wattage": { $gte: requiredWatts }
-    }).sort({ price: 1 }).limit(20).toArray();
+    }).sort({ price: 1 }).limit(15).toArray();
 
     // Tier fallback: if tier filter is too strict, drop it
     if (results.length === 0 && minPsuPrice > 0) {
@@ -1739,7 +1739,7 @@ function stepPSU(coolerIndex) {
             type: "Power Supply",
             price: { $type: "number", $lte: maxPrice },
             "specs.wattage": { $gte: requiredWatts }
-        }).sort({ price: 1 }).limit(20).toArray();
+        }).sort({ price: 1 }).limit(15).toArray();
     }
 
     if (results.length === 0) {
@@ -1747,7 +1747,7 @@ function stepPSU(coolerIndex) {
         results = db.components.find({
             type: "Power Supply", price: { $type: "number" },
             "specs.wattage": { $gte: requiredWatts }
-        }).sort({ price: 1 }).limit(10).toArray();
+        }).sort({ price: 1 }).limit(15).toArray();
     }
 
     buildState.lastResults = results;
@@ -1802,7 +1802,7 @@ function stepCase(psuIndex) {
     results = results.filter(function (c) {
         var cf = (c.specs && c.specs.form_factor) || "";
         return caseSupportsMotherboard(cf, moboForm);
-    });
+    }).slice(0, 15);
 
     if (results.length === 0) {
         // Fallback 1: over-budget but MUST fit GPU + mobo form factor
@@ -1812,7 +1812,7 @@ function stepCase(psuIndex) {
         }).sort({ price: 1 }).limit(30).toArray().filter(function (c) {
             var cf = (c.specs && c.specs.form_factor) || "";
             return caseSupportsMotherboard(cf, moboForm);
-        });
+        }).slice(0, 15);
     }
 
     if (results.length === 0 && gpuLength > 0) {
@@ -1825,7 +1825,7 @@ function stepCase(psuIndex) {
         }).sort({ "specs.max_gpu_length": -1, price: 1 }).limit(30).toArray().filter(function (c) {
             var cf = (c.specs && c.specs.form_factor) || "";
             return caseSupportsMotherboard(cf, moboForm);
-        });
+        }).slice(0, 15);
     }
 
     if (results.length === 0) {
