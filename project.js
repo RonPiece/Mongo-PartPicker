@@ -553,11 +553,10 @@ function section4_queries() {
     db.components.find(
         { type: "CPU", "specs.score": { $gt: 2000 } },
         { name: 1, price: 1, "specs.score": 1, _id: 0 }
-    ).limit(2)
+    ).limit(3)
 
 
     // 2. Query on embedded documents and arrays (Embedded)
-    // Requirement: access elements inside arrays
     // Finds users who made an order that contains an item of type GPU
     // Method: Dot Notation - direct access into nested arrays
     db.users.find(
@@ -567,7 +566,6 @@ function section4_queries() {
 
 
     // 3. Query on referenced data (Referenced)
-    // Requirement: data coming from documents that are referenced
     // Step A: fetch the ID of the RTX 4090 GPU
     var gpuDoc = db.components.findOne({ name: { $regex: "RTX 4090", $options: "i" } });
 
@@ -577,19 +575,25 @@ function section4_queries() {
         { build_name: 1, total_price: 1, _id: 0 }
     ).limit(3)
 
+    // (Optional) Step C: Use those Object IDs to pull the actual component details from the components collection!
+    db.components.find(
+        {
+            _id: { $in: myRig.parts },
+            type: { $in: ["GPU", "Storage"] }
+        },
+        { type: 1, name: 1, price: 1, _id: 0 }
+    )
+
 
     // 4. Combine sort, skip, limit, and convert to array
-    // Requirement: combine sort, skip, limit, toArray
     // Finds the most expensive motherboards, skips the first 2, and takes the next 3
     db.components.find({ type: "Motherboard" })
         .sort({ price: -1 }) // Sort from expensive to cheap
         .skip(2)             // Skip the 2 most expensive
         .limit(3)            // Show the next 3
-        .toArray()           // Convert to a JavaScript array
 
 
     // 5. Using a forEach loop
-    // Requirement: use forEach
     // Iterate over cheap RAM kits (under $40) and perform an action (print) for each document
     db.components.find({ type: "RAM", price: { $lt: 40 } })
         .limit(3)
@@ -604,7 +608,7 @@ function section4_queries() {
         {
             type: "Case",
             $or: [
-                { name: { $regex: "ASUS", $options: "i" } },
+                { name: { $regex: "ASUS", $options: "i" } }, // i stand for case insensitive
                 { name: { $regex: "MSI", $options: "i" } }
             ]
         },
@@ -613,9 +617,12 @@ function section4_queries() {
 
 
     // 7. Count
-    // Requirement: use count
     // Check how many components exist in total in the catalog
     db.components.count({})
+
+    // 7.1 Count with a query
+    // Check how many components exist in total in the catalog , There is maybe cpu's without a price.
+    db.components.count({ type: "CPU" })
 
 
     // 8. $in operator - Query multiple types at once
@@ -635,7 +642,7 @@ function section4_queries() {
 
 
     // 10. cursor .count() (deprecated but required per spec)
-    // Counts the number of GPUs with a numeric price using the legacy count() method
+    // Counts the number of GPUs with a numeric price
     db.components.find({ type: "GPU", price: { $type: "number" } }).count()
 
 
@@ -651,6 +658,60 @@ function section4_queries() {
         },
         { name: 1, price: 1, "specs.chipset": 1, _id: 0 }
     ).sort({ price: 1 }).limit(5)
+
+    // 12 $and with $or and range ($gte + $lte)
+    // Finds powerful CPUs (Score >= 2000) under $500 that are EITHER from Intel OR AMD
+    db.components.find(
+        {
+            $and: [
+                { type: "CPU" },
+                { "specs.score": { $gte: 2000 } },
+                { price: { $lte: 500 } },
+                {
+                    $or: [
+                        { manufacturer: "Intel" },
+                        { manufacturer: "AMD" }
+                    ]
+                }
+            ]
+        },
+        { name: 1, manufacturer: 1, price: 1, "specs.score": 1, _id: 0 }
+    ).sort({ "specs.score": -1 }).limit(5)
+
+    // 13 $and with $gte, $lte, and specific nested field
+    // Finds RAM kits that are 32GB or larger, faster than 6000MHz, and cost between $100 and $250
+    db.components.find(
+        {
+            $and: [
+                { type: "RAM" },
+                { "specs.capacity_gb": { $gte: 32 } },
+                { "specs.speed_mhz": { $gte: 6000 } },
+                { price: { $gte: 100 } },
+                { price: { $lte: 250 } }
+            ]
+        },
+        { name: 1, "specs.capacity_gb": 1, "specs.speed_mhz": 1, price: 1, _id: 0 }
+    ).limit(3)
+
+
+    // 14 Complex $and + $or + Regex combined
+    // Finds Motherboards that are EITHER from ASUS or Gigabyte, AND support DDR5 RAM, AND cost less than $300
+    db.components.find(
+        {
+            $and: [
+                { type: "Motherboard" },
+                { "specs.ram_type": "DDR5" },
+                { price: { $lt: 300 } },
+                {
+                    $or: [
+                        { name: { $regex: "ASUS", $options: "i" } },
+                        { name: { $regex: "Gigabyte", $options: "i" } }
+                    ]
+                }
+            ]
+        },
+        { name: 1, "specs.ram_type": 1, price: 1, _id: 0 }
+    ).limit(3)
 
 
 } // end section4_queries()
