@@ -2312,7 +2312,7 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
     var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 4000;
 
     var started = new Date();
-    print("[Section 7] Running stepCPU pipeline: " + n + " samples x 4 usage types, range $" + minB + "-$" + maxB);
+    print("[Section 7] Running startBuild() pipeline: " + n + " samples x 4 usage types, range $" + minB + "-$" + maxB);
     db.recommended_combos.drop();
     generateRecommendedCombosSamples(n, minB, maxB);
     try {
@@ -2378,17 +2378,18 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
                 best = v;
             }
         });
-        return best;
+        return best; // combo_id travels with the winning value object
     };
 
     var finalizeBestBuild = function (key, reducedValue) {
         return {
             budget_tier: key,
+            combo_ref: reducedValue.combo_id,  // Reference to winning build in recommended_combos
             winner: reducedValue.build_name,
             performance_score: reducedValue.score,
             actual_price: reducedValue.price,
             target_budget: reducedValue.target_budget,
-            // Winning build component details
+            // Winning build component details (embedded for fast reads)
             components: reducedValue.components
         };
     };
