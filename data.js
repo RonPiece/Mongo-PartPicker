@@ -32,6 +32,8 @@ if (typeof cat !== "function") {
     }
 }
 
+
+// Resolves a relative path using the repo root set by project.js (falls back to relative path)
 function resolveMppPath(relPath) {
     try {
         if (typeof globalThis !== "undefined" && globalThis.__MPP_REPO_ROOT__) {
@@ -44,6 +46,8 @@ function resolveMppPath(relPath) {
     return relPath;
 }
 
+
+// Loads a JSON file from disk via cat() and parses it. Throws if not an array.
 function loadJsonArray(path) {
     var resolved = resolveMppPath(path);
     var txt = cat(resolved);
@@ -74,6 +78,8 @@ var rawPowerSupplies = loadJsonArray("data-filtered/json/power-supply.json");
 // - "Corsair Vengeance DDR5-5600"
 // - "Samsung 990 Pro 2TB"
 
+// IIFE: Ensures demo-critical components exist in raw data before ETL runs.
+// Patches missing RAM kits and storage drives that later demo lookups depend on.
 (function patchDemoCriticalRawData() {
     function shallowClone(obj) {
         var out = {};
@@ -167,12 +173,14 @@ var rawPowerSupplies = loadJsonArray("data-filtered/json/power-supply.json");
 
 // --- Section 3: Utility Functions (Reusable JS Logic) ---
 
+// Safely converts a value to a number. Returns fallback if null, undefined, or NaN.
 function safeNumber(value, fallback) {
     if (value === null || value === undefined) return fallback;
     var n = Number(value);
     return isNaN(n) ? fallback : n;
 }
 
+// Collapses multiple whitespace characters into a single space and trims edges
 function normalizeSpaces(s) {
     return (s || "").toString().replace(/\s+/g, " ").trim();
 }
@@ -182,6 +190,9 @@ function normalizeSpaces(s) {
 // Demonstrates advanced JS pattern matching and conditional logic
 // ============================================================
 
+// Detects the CPU socket from its name using regex pattern matching.
+// Covers AMD (Ryzen, Threadripper, EPYC, Athlon, FX, Phenom, A-series)
+// and Intel (Core Ultra, Core i3-i9 Gen 1-14, Xeon, Pentium, Celeron).
 function detectCpuSocket(cpuName) {
     var name = (cpuName || "").toString();
 
@@ -335,6 +346,8 @@ function detectCpuSocket(cpuName) {
     return null;
 }
 
+// Transforms raw CPU JSON into the Polymorphic component schema.
+// Computes: manufacturer, socket (via detectCpuSocket), score = cores*100 + baseClock*50
 function cpuToComponent(raw) {
     var name = normalizeSpaces(raw.name);
     var manufacturer = (name.indexOf("AMD") === 0) ? "AMD" : (name.indexOf("Intel") === 0 ? "Intel" : null);
@@ -371,6 +384,7 @@ function cpuToComponent(raw) {
 // GPU Transformer
 // ============================================================
 
+// Detects GPU manufacturer from chipset string (NVIDIA, AMD, or Intel Arc)
 function detectGpuManufacturer(chipset) {
     var c = (chipset || "").toString();
     if (c.indexOf("GeForce") >= 0 || c.indexOf("RTX") >= 0 || c.indexOf("GTX") >= 0) return "NVIDIA";
@@ -379,6 +393,7 @@ function detectGpuManufacturer(chipset) {
     return "Unknown";
 }
 
+// Normalizes GPU chipset strings (e.g. "SUPER" → "Super")
 function normalizeGpuChipset(chipset) {
     var s = normalizeSpaces(chipset);
     // Normalize marketing suffix casing (SUPER -> Super)
@@ -386,6 +401,7 @@ function normalizeGpuChipset(chipset) {
     return s;
 }
 
+// Transforms raw GPU JSON into component schema. Score = VRAM * 200. Stores length_mm for case compatibility.
 function gpuToComponent(raw) {
     var chipset = normalizeGpuChipset(raw.chipset);
     var manufacturer = detectGpuManufacturer(chipset);
@@ -419,6 +435,7 @@ function gpuToComponent(raw) {
 // Motherboard Transformer
 // ============================================================
 
+// Normalizes motherboard brand names (e.g. "Asus" → "ASUS", "HERO" → "Hero")
 function normalizeMotherboardName(name) {
     var s = normalizeSpaces(name);
     s = s.replace(/^Asus\b/, "ASUS");
@@ -430,6 +447,8 @@ function normalizeMotherboardName(name) {
     return s;
 }
 
+// Infers DDR generation from socket + board name. Checks explicit DDR markers first,
+// then falls back to socket-based rules (e.g. AM5 → DDR5, LGA1155 → DDR3).
 function inferMotherboardRamType(socket, boardName) {
     var s = normalizeSpaces(socket).toUpperCase();
     var n = normalizeSpaces(boardName).toUpperCase();
@@ -470,6 +489,7 @@ function inferMotherboardRamType(socket, boardName) {
     return null;
 }
 
+// Transforms raw motherboard JSON into component schema. Infers RAM type via inferMotherboardRamType().
 function motherboardToComponent(raw) {
     var name = normalizeMotherboardName(raw.name);
     var manufacturer = normalizeSpaces(raw.name).split(" ")[0];
@@ -498,12 +518,14 @@ function motherboardToComponent(raw) {
 // Case Transformer
 // ============================================================
 
+// Normalizes the raw case "type" field (e.g. "ATX Mid Tower") into a clean string
 function cleanCaseFormFactor(caseType) {
     // Map raw "type" into a consistent form factor-ish string.
     // Example raw: "ATX Mid Tower" / "MicroATX Mini Tower"
     return normalizeSpaces(caseType);
 }
 
+// Returns which motherboard form factors a case supports (e.g. Full Tower → [ATX, Micro ATX, Mini ITX])
 function inferCaseSupportedMotherboards(caseType) {
     var s = normalizeSpaces(caseType).toLowerCase();
 
@@ -516,6 +538,7 @@ function inferCaseSupportedMotherboards(caseType) {
     return ["ATX", "Micro ATX", "Mini ITX"];
 }
 
+// Transforms raw case JSON into component schema. Includes max_gpu_length for GPU clearance checks.
 function caseToComponent(raw) {
     var name = normalizeSpaces(raw.name);
     var manufacturer = name.split(" ")[0];
@@ -545,11 +568,13 @@ function caseToComponent(raw) {
 // RAM Transformer
 // ============================================================
 
+// Builds a clean RAM name: strips capacity suffix and appends "DDR{gen}-{speed}" (e.g. "G.Skill Trident Z5 RGB DDR5-6400")
 function normalizeRamName(rawName, ddrGen, speedMhz) {
     var base = normalizeSpaces(rawName).replace(/\s+\d+\s*GB$/i, "");
     return base + " DDR" + ddrGen + "-" + speedMhz;
 }
 
+// Transforms raw RAM JSON into component schema. Computes total capacity = modules × size.
 function ramToComponent(raw) {
     var speedGen = raw.speed && raw.speed.length ? safeNumber(raw.speed[0], null) : null;
     var speedMhz = raw.speed && raw.speed.length ? safeNumber(raw.speed[1], null) : null;
@@ -589,6 +614,7 @@ function ramToComponent(raw) {
 // Storage Transformer
 // ============================================================
 
+// Appends human-readable capacity suffix (e.g. 2000GB → "2TB", 500 → "500GB")
 function normalizeStorageName(rawName, capacityGb) {
     var base = normalizeSpaces(rawName);
     if (capacityGb && capacityGb >= 1000 && (capacityGb % 1000) === 0) {
@@ -598,6 +624,7 @@ function normalizeStorageName(rawName, capacityGb) {
     return base;
 }
 
+// Transforms raw storage JSON into component schema. Includes type, interface, and form factor.
 function storageToComponent(raw) {
     var capacityGb = safeNumber(raw.capacity, null);
     var name = normalizeStorageName(raw.name, capacityGb);
@@ -624,6 +651,7 @@ function storageToComponent(raw) {
 // CPU Cooler Transformer
 // ============================================================
 
+// Transforms raw CPU cooler JSON into component schema. Classifies as "Liquid" or "Air" by name.
 function cpuCoolerToComponent(raw) {
     var name = normalizeSpaces(raw.name);
     var manufacturer = normalizeSpaces(raw.name).split(" ")[0];
@@ -667,6 +695,7 @@ function cpuCoolerToComponent(raw) {
 // Power Supply (PSU) Transformer
 // ============================================================
 
+// Transforms raw PSU JSON into component schema. Includes wattage, efficiency rating, and modular type.
 function psuToComponent(raw) {
     var name = normalizeSpaces(raw.name);
     var manufacturer = normalizeSpaces(raw.name).split(" ")[0];
@@ -693,6 +722,7 @@ function psuToComponent(raw) {
 // Transform all raw arrays into MongoDB-ready component arrays
 // ============================================================
 
+// Applies a transformer function to every element in a raw JSON array
 function transformArray(rawArr, transformFn) {
     var result = [];
     for (var i = 0; i < rawArr.length; i++) {
@@ -711,7 +741,7 @@ var transformedStorage = transformArray(rawStorageDrives, storageToComponent);
 var transformedCoolers = transformArray(rawCpuCoolers, cpuCoolerToComponent);
 var transformedPsus = transformArray(rawPowerSupplies, psuToComponent);
 
-// Utility function to compact array (remove nulls)
+// Removes null/undefined entries from an array (used to clean up seed build parts)
 function compactArray(arr) {
     var out = [];
     for (var i = 0; i < arr.length; i++) {

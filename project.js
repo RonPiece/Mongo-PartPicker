@@ -114,6 +114,7 @@ print("Component insertion complete!");
 // Seed data - builds collection (Referenced Data + compatibility)
 // ============================================================
 
+// Looks up the cheapest GPU by manufacturer + chipset. Fallback: any GPU matching chipset if no priced one exists.
 function pickGpuIdByChipset(manufacturer, chipset) {
     var q = { type: "GPU", manufacturer: manufacturer, "specs.chipset": chipset, price: { $type: "number" } };
     var doc = db.components.find(q, { _id: 1 }).sort({ price: 1 }).limit(1).toArray()[0];
@@ -126,6 +127,7 @@ function pickGpuIdByChipset(manufacturer, chipset) {
     return doc._id;
 }
 
+// Returns the ObjectId of the cheapest component of the given type. Used to fill missing build slots.
 function pickCheapestId(type, query) {
     query = query || {};
     query.type = type;
@@ -142,6 +144,7 @@ function pickCheapestId(type, query) {
     return doc._id;
 }
 
+// Returns the ObjectId of the cheapest PSU meeting a minimum wattage. 3-tier fallback: priced → any → any PSU.
 function pickPsuId(minWattage) {
     minWattage = minWattage || 650;
     var q = { type: "Power Supply", "specs.wattage": { $gte: minWattage } };
@@ -161,6 +164,7 @@ function pickPsuId(minWattage) {
     return doc._id;
 }
 
+// Guarantees a build has exactly 8 parts (one per type). Auto-fills missing slots with cheapest available.
 function ensureBuildHasAllParts(parts, buildName) {
     var requiredTypes = [
         "Case",
@@ -200,6 +204,7 @@ function ensureBuildHasAllParts(parts, buildName) {
     return parts;
 }
 
+// Fetch ObjectIds for seed builds — these reference the 'components' collection (Referenced pattern)
 var cpu_i9 = db.components.findOne({ name: "Intel Core i9-14900K" })._id
 var cpu_i7 = db.components.findOne({ name: "Intel Core i7-14700K" })._id
 var cpu_ryzen9 = db.components.findOne({ name: "AMD Ryzen 9 7950X" })._id
@@ -225,6 +230,7 @@ var mb_asus = db.components.findOne({ name: "ASUS ROG Maximus Z790 Hero" })._id
 var mb_msi = db.components.findOne({ name: "MSI MAG B650 Tomahawk WiFi" })._id
 var mb_gigabyte = db.components.findOne({ name: "Gigabyte Z790 AORUS Elite AX" })._id
 
+// Section 2: insertMany — 5 seed builds. Each 'parts' array holds 8 Referenced ObjectIds (one per component type).
 db.builds.insertMany([
     {
         _id: ObjectId(),
@@ -293,12 +299,14 @@ db.builds.insertMany([
 // Structure: User -> orders[] -> items[] (3-level hierarchy)
 // ============================================================
 
+// Fetch build ObjectIds — stored in users.saved_builds as References
 var build_ultimate = db.builds.findOne({ build_name: "Ultimate Gaming Rig 2024" })._id
 var build_amd = db.builds.findOne({ build_name: "AMD Workstation Pro" })._id
 var build_sweetspot = db.builds.findOne({ build_name: "Sweet Spot Gaming" })._id
 var build_budget = db.builds.findOne({ build_name: "Budget Intel Build" })._id
 var build_highend = db.builds.findOne({ build_name: "High-End Intel Gaming" })._id
 
+// Section 2: insertMany — 5 seed users. Each has Embedded preferences, orders[], and Referenced saved_builds[].
 db.users.insertMany([
     {
         username: "gamer2024",
@@ -418,8 +426,10 @@ db.users.insertMany([
 // Seed Demo Data: reviews + price_history (so Sections 4-5 examples are meaningful)
 // ============================================================
 
+// IIFE: injects reviews[] and price_history[] into select components via updateOne + $set
 ; (function seedDemoEngagement() {
     function isNumber(x) { return typeof x === "number" && !isNaN(x); }
+    // Generates a 3-point price history (8% below → 2% below → 3% above current price)
     function mkHistory(p) {
         if (!isNumber(p)) return [];
         var p1 = Math.max(1, Math.round((p * 0.92) * 100) / 100);
@@ -503,6 +513,7 @@ print("\n  ✓ Data loaded and seeded successfully.");
 // Note: JSON loading is done in data.js using cat() + JSON.parse()
 // ============================================================
 
+// Section 3: Returns the N cheapest CPU names as an array of strings
 function getCheapCpuNames(limit) {
     var names = [];
     var n = limit || 5;
@@ -528,11 +539,13 @@ function getCheapCpuNames(limit) {
     return names;
 }
 
+// Section 3: Finds components within a price range, returns array of {name, price}
 function findInBudget(min, max) {
     var query = { price: { $gte: min, $lte: max } };
     return db.components.find(query, { name: 1, price: 1, _id: 0 }).limit(3).toArray();
 }
 
+// Section 3: Counts total RAM kits in the catalog (uses legacy .count() with fallback)
 function getRamCount() {
     try {
         return db.components.find({ type: "RAM" }).count();
@@ -875,9 +888,9 @@ function section5_updatesAndDeletes() {
 // ============================================================
 
 /**
- * מחזיר פרמטרים לפי פרופיל שימוש.
+ * Returns budget ratios, RAM limits, and scoring weights per usage profile.
  * @param {string} usageType - gaming / workstation / budget / enthusiast
- * @returns {object} פרמטרים: יחסי תקציב, RAM מינימלי, משקלות ציון
+ * @returns {object} Profile params: budget caps, RAM range, scoring weights
  */
 function getProfileParams(usageType) {
     var usage = (usageType || "gaming").toLowerCase();
@@ -923,7 +936,7 @@ function getProfileParams(usageType) {
 // Section 3: Scoring & Wattage (JS functions)
 // ============================================================
 
-/** ציון ביצועים משוקלל לפי פרופיל */
+/** Weighted performance score based on usage profile (e.g. Gaming: 60% GPU, 40% CPU) */
 function calculateWeightedScore(cpuScore, gpuScore, ramCapacity, weights) {
     return Math.round(
         (cpuScore || 0) * (weights.cpu || 0) +
@@ -933,8 +946,8 @@ function calculateWeightedScore(cpuScore, gpuScore, ramCapacity, weights) {
 }
 
 /**
- * דרישת ספק כוח — משתמש ב-Score לחישוב TDP אפקטיבי + 25% מרווח
- * (i9-12900F רשום 65W אבל שואב 200W+ בפועל)
+ * PSU wattage requirement — uses Score to estimate real TDP + 25% headroom.
+ * (e.g. i9-12900F is listed at 65W but draws 200W+ under load)
  */
 function calculateRequiredWatts(cpuTdp, gpuVram, cpuScore) {
     var effectiveCpu = cpuTdp || 65;
@@ -946,7 +959,7 @@ function calculateRequiredWatts(cpuTdp, gpuVram, cpuScore) {
 }
 
 /**
- * שריון מינימלי למקרר — Score מעל 1500 = TDP אפקטיבי 150W
+ * Minimum cooler budget — Score above 1500 = effective TDP 150W
  */
 function getCoolerReserve(tdp, cpuScore) {
     var effectiveTdp = tdp || 65;
@@ -961,7 +974,7 @@ function getCoolerReserve(tdp, cpuScore) {
 }
 
 /**
- * Section 3: בדיקת תאימות form factor — האם המארז מתאים ללוח-האם?
+ * Section 3: Form-factor compatibility check — does the case fit the motherboard?
  * Full Tower > ATX > MicroATX > Mini ITX
  */
 function caseSupportsMotherboard(caseForm, moboForm) {
@@ -986,7 +999,7 @@ function caseSupportsMotherboard(caseForm, moboForm) {
 
 
 // ============================================================
-// Section 3: Formatting Helpers (JS functions)
+// Section 3: Formatting Helpers — used by printComponentList()
 // ============================================================
 
 function padRight(str, len) {
@@ -1012,7 +1025,8 @@ function truncate(str, max) {
 
 
 // ============================================================
-// Global Build State
+// Global Build State — shared across all step functions
+// Tracks budget, selections, tier, and the last result list (for pick())
 // ============================================================
 
 var buildState = {
@@ -1040,7 +1054,7 @@ var MODERN_SOCKETS = ["AM4", "AM5", "LGA1200", "LGA1700", "LGA1851"];
 // ============================================================
 
 /**
- * Section 6: מחשב גבולות Tier לפי אחוזוני מחיר בDB.
+ * Section 6: Computes tier boundaries by price percentile from DB.
  * Entry (0–25%), Mid (25–60%), High (60–85%), Enthusiast (85%+)
  */
 function getTierBoundaries(type) {
@@ -1069,6 +1083,8 @@ var TIER_NAMES = ["", "Entry", "Mid", "High", "Enthusiast"]; // 1-indexed
 
 // Modern CPU sockets — filters out ancient LGA775/AM2/FM2 etc.
 var MODERN_SOCKETS = ["AM4", "AM5", "LGA1200", "LGA1700", "LGA1851"];
+
+// Returns which price tier (1-4) a component falls into based on tier boundaries
 function priceTier(price, bounds) {
     if (price <= bounds.entry_max) return 1;
     if (price <= bounds.mid_max) return 2;
@@ -1076,6 +1092,7 @@ function priceTier(price, bounds) {
     return 4;
 }
 
+// Converts a minimum tier requirement into the corresponding price floor
 function tierToFloor(minTier, bounds) {
     if (minTier <= 1) return 0;
     if (minTier === 2) return bounds.entry_max;
@@ -1089,7 +1106,7 @@ function tierToFloor(minTier, bounds) {
 // ============================================================
 
 /**
- * שואל את הDB פעם אחת למחיר המינימלי לכל סוג רכיב.
+ * Queries DB once to find the cheapest price per component type.
  * Section 6: aggregate with $group + $min accumulator
  */
 function getMinCosts() {
@@ -1105,8 +1122,8 @@ function getMinCosts() {
 }
 
 /**
- * סוכם עלויות מינימום לרכיבים עתידיים — Quality-Aware.
- * משתמש בדרישות אמיתיות (לא DB minimum) לקירור ולספק כוח.
+ * Sums up minimum costs for remaining components — Quality-Aware.
+ * Uses real requirements (not just DB minimum) for cooler and PSU.
  */
 function futureReserve(types) {
     var total = 0;
@@ -1152,6 +1169,7 @@ function futureReserve(types) {
 // Helper: Print formatted component list
 // ============================================================
 
+// Helper: Prints a formatted table of components with dynamic columns
 function printComponentList(results, columns) {
     if (results.length === 0) {
         print("  (no components found)");
@@ -1193,6 +1211,7 @@ function printComponentList(results, columns) {
 // validateAndSave(index, key, newStep) — Extract repeated pattern
 // ============================================================
 
+// Shortcut: calls the next step function. User calls pick(3) to select item #3.
 function pick(index) {
     var next = buildState.step + 1;
     if (next === 2) return stepMotherboard(index);
@@ -1208,7 +1227,7 @@ function pick(index) {
 
 /**
  * Section 3: validates index, saves selection, updates spent.
- * @returns {object|null} — הרכיב שנבחר, או null אם שגיאה
+ * @returns {object|null} — the selected component, or null on error
  */
 function validateAndSave(index, key, newStep) {
     if (buildState.step < newStep - 1) {
@@ -1244,6 +1263,7 @@ function validateAndSave(index, key, newStep) {
 // Section 6: aggregate() with $match, $project, $sort, $limit
 // ============================================================
 
+// Step 1: Initializes build state and shows CPU options via aggregation pipeline
 function startBuild(budget, usageType) {
     buildState.budget = budget;
     buildState.usage = usageType || "gaming";
@@ -1321,6 +1341,7 @@ function startBuild(budget, usageType) {
 // Section 6: $lookup (Self-Join) + $unwind + $match + $project
 // ============================================================
 
+// Step 2: Finds compatible motherboards via Self-Join lookup (CPU socket → Mobo socket)
 function stepMotherboard(cpuIndex) {
     var cpu = validateAndSave(cpuIndex, "cpu", 2);
     if (!cpu) return;
@@ -1357,7 +1378,7 @@ function stepMotherboard(cpuIndex) {
         ", max " + formatPrice(maxPrice) + ")");
 
     // Section 6: $lookup Self-Join — CPU → Motherboard by socket
-    // מוצאים לוחות-אם תואמים לפי socket דרך Self-Join על אותה קולקציה
+    // Finds motherboards matching the CPU socket via Self-Join on the same collection
     var results = db.components.aggregate([
         // Stage 1: Match the selected CPU
         { $match: { _id: cpu._id } },
@@ -1376,7 +1397,7 @@ function stepMotherboard(cpuIndex) {
         { $unwind: "$socket_matches" },
 
         // Stage 4: $match — keep only Motherboards within budget + quality floor
-        // גם מחייב specs.ram_type — בלי זה שלב ה-RAM לא יכול לסנן DDR4/DDR5 נכון
+        // Also requires specs.ram_type — without it, RAM step can't filter DDR4/DDR5 correctly
         {
             $match: {
                 "socket_matches.type": "Motherboard",
@@ -1440,6 +1461,7 @@ function stepMotherboard(cpuIndex) {
 // Section 4: find().sort().limit() — filtered by DDR type
 // ============================================================
 
+// Step 3: Filters RAM by DDR type from motherboard, enforces capacity and speed limits
 function stepRAM(moboIndex) {
     var mobo = validateAndSave(moboIndex, "motherboard", 3);
     if (!mobo) return;
@@ -1534,6 +1556,7 @@ function stepRAM(moboIndex) {
 // Section 4: find().sort().limit() — best score in budget
 // ============================================================
 
+// Step 4: Finds best GPU by score within budget. Surplus from prior steps feeds GPU cap.
 function stepGPU(ramIndex) {
     var ram = validateAndSave(ramIndex, "ram", 4);
     if (!ram) return;
@@ -1566,7 +1589,7 @@ function stepGPU(ramIndex) {
         type: "GPU",
         price: { $type: "number", $lte: maxPrice },
         "specs.score": { $type: "number", $gte: gpuMinScore },
-        "specs.length_mm": { $type: "number", $gt: 0 }  // חובה — בלי זה שלב המארז לא יכול לבדוק התאמה
+        "specs.length_mm": { $type: "number", $gt: 0 }  // Required — without this, Case step can't verify GPU clearance
     }).sort({ "specs.score": -1, price: 1 }).limit(15).toArray();
 
     // Fallback 1: drop score minimum but keep budget
@@ -1605,6 +1628,7 @@ function stepGPU(ramIndex) {
 // Section 4: find().sort().limit()
 // ============================================================
 
+// Step 5: Selects SSD storage within budget and capacity limits (HDDs excluded)
 function stepStorage(gpuIndex) {
     var gpu = validateAndSave(gpuIndex, "gpu", 5);
     if (!gpu) return;
@@ -1667,6 +1691,7 @@ function stepStorage(gpuIndex) {
 // Section 4: find().sort().limit() — TDP-aware minimum
 // ============================================================
 
+// Step 6: Selects cooler matching CPU TDP. Blocks oversized or undersized coolers.
 function stepCooler(storageIndex) {
     var storage = validateAndSave(storageIndex, "storage", 6);
     if (!storage) return;
@@ -1758,6 +1783,7 @@ function stepCooler(storageIndex) {
 // Section 4: find().sort().limit()
 // ============================================================
 
+// Step 7: Selects PSU meeting wattage requirement. Tier-matched to GPU price tier.
 function stepPSU(coolerIndex) {
     var cooler = validateAndSave(coolerIndex, "cooler", 7);
     if (!cooler) return;
@@ -1826,6 +1852,7 @@ function stepPSU(coolerIndex) {
 // Section 6: aggregate() + $project with $subtract
 // ============================================================
 
+// Step 8: Selects case by GPU clearance + motherboard form-factor compatibility
 function stepCase(psuIndex) {
     var psu = validateAndSave(psuIndex, "psu", 8);
     if (!psu) return;
@@ -1859,7 +1886,7 @@ function stepCase(psuIndex) {
     ]).toArray();
 
     // Section 3: Filter by form factor compatibility (JS function)
-    // מסנן מארזים שלא מתאימים ללוח-האם שנבחר
+    // Filter out cases that don't fit the selected motherboard form-factor
     results = results.filter(function (c) {
         var cf = (c.specs && c.specs.form_factor) || "";
         return caseSupportsMotherboard(cf, moboForm);
@@ -1919,6 +1946,7 @@ function stepCase(psuIndex) {
 // Section 6: aggregate with $add + $out
 // ============================================================
 
+// Step 9: Assembles final build document, computes weighted score, saves to recommended_combos
 function finalizeBuild(caseIndex) {
     var pcCase = validateAndSave(caseIndex, "pcCase", 9);
     if (!pcCase) return;
@@ -1982,15 +2010,15 @@ function finalizeBuild(caseIndex) {
     };
 
     // Section 4: insertOne + Section 6: $add + $out
-    // במצב אינטראקטיבי: מחיקה + שמירה + $out (כמו קודם)
-    // במצב אוטומטי (_autoMode): דילוג — generateRecommendedCombosSamples מנהלת את ה-batch
+    // Interactive mode: drop + save + $out (as before)
+    // Auto mode (_autoMode): skip — generateRecommendedCombosSamples handles the batch
     if (!buildState._autoMode) {
         db.recommended_combos.drop();
         db.recommended_combos.insertOne(completeBuild);
 
-        // Section 6: $add + $out — מחשב computed_total ומחליף את הקולקציה בגרסה המלאה
-        // $add סוכם את כל מחירי הרכיבים (אימות עצמאי של total_price)
-        // $out מחליף את הקולקציה בשלמותה עם השדה המחושב
+        // Section 6: $add + $out — computes computed_total and replaces collection with full version
+        // $add sums all component prices (independent verification of total_price)
+        // $out replaces the entire collection with the computed field added
         db.recommended_combos.aggregate([
             { $match: { build_method: "interactive" } },
             {
@@ -2004,7 +2032,7 @@ function finalizeBuild(caseIndex) {
                     compatibility_details: 1,
                     performance_metrics: 1,
                     total_price: 1,
-                    // Section 6: $add — MongoDB מחשב את הסכום בעצמו (אימות עצמאי)
+                    // Section 6: $add — MongoDB computes the sum independently (cross-check)
                     computed_total: {
                         $add: [
                             "$price_breakdown.cpu",
@@ -2020,7 +2048,7 @@ function finalizeBuild(caseIndex) {
                     generated_at: 1
                 }
             },
-            // Section 6: $out — שומר ישירות ל-recommended_combos עם computed_total
+            // Section 6: $out — writes directly to recommended_combos with computed_total
             { $out: "recommended_combos" }
         ]);
     }
@@ -2067,6 +2095,7 @@ function finalizeBuild(caseIndex) {
 // $match, $group ($sum, $avg, $min, $max), $project ($round, $multiply), $sort
 // ============================================================
 
+// Pipeline #2: Aggregates count, avg/min/max price, and estimated market value per component type
 function section6_marketAnalysis() {
     print("\n  ── Market Analysis ──");
 
@@ -2119,6 +2148,7 @@ function section6_marketAnalysis() {
 // $match, $group ($sum, $push, $first), $sort, $limit
 // ============================================================
 
+// Pipeline #3: Groups products by manufacturer, then by type, showing count and avg price
 function section6_manufacturerBreakdown() {
     print("\n  ── Manufacturer Breakdown ──");
 
@@ -2303,6 +2333,7 @@ function generateRecommendedCombosSamples(samplesPerUsage, minBudget, maxBudget)
 // Wrapped in a function to run manually.
 // ============================================================
 
+// Section 7 main: Generates sample builds, then runs MapReduce to find the best build per price tier
 function section7_mapReduce(samples, minBudget, maxBudget) {
     // Runs generateRecommendedCombosSamples (uses stepCPU pipeline) then MapReduce on results.
     // samples = number of budget sample points per usage type (gaming/workstation/budget/enthusiast)
@@ -2412,6 +2443,7 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
 // Section 7B: MapReduce — Manufacturer Stats
 // ============================================================
 
+// MapReduce B: Counts components and calculates avg price per manufacturer (filter: price > $200)
 function section7_manufacturerStats() {
     // MapReduce B: component stats per manufacturer (with query filter: price > $200)
     var mapManufacturer = function () {
@@ -2451,6 +2483,7 @@ function section7_manufacturerStats() {
 // Section 7C: MapReduce — Rating Distribution
 // ============================================================
 
+// MapReduce C: Counts how many reviews exist per star rating (1-5)
 function section7_ratingDistribution() {
     // MapReduce C: rating distribution (works even if some docs have no reviews)
     var mapRatings = function () {
