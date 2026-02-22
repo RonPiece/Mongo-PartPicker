@@ -18,7 +18,7 @@
 // This ensures fresh data with correct formulas every time
 // ============================================================
 
-db = db.getSiblingDB("MongoPartPicker");
+db = db.getSiblingDB("PcPartPicker");
 
 // Drop existing collections for a clean run
 db.components.drop()
@@ -48,9 +48,7 @@ try {
         globalThis.__MPP_REPO_ROOT__ = __mppRepo;
     }
 } catch (e) {
-    // Fallback: Hardcode the directory to make the load work for the professor
-    __mppRepo = "C:/Users/Ron/Documents/GitHub/Mongo-PartPicker";
-    globalThis.__MPP_REPO_ROOT__ = __mppRepo;
+    // require('path') not available — __mppRepo stays null, will use relative path below
 }
 
 var __mppLoadedData = false;
@@ -934,7 +932,7 @@ function section5_updatesAndDeletes() {
 // ============================================================
 //
 // Pipeline Stages: $match, $project, $lookup (Self-Join),
-//   $unwind, $group, $sort, $limit, $out, $expr
+//   $unwind, $group, $sort, $limit, $out
 //
 // Math Operators: $add, $subtract, $multiply, $divide, $round
 // Accumulators:   $first, $sum, $avg, $min, $max, $push
@@ -2046,7 +2044,7 @@ function finalizeBuild(caseIndex) {
             ram_capacity_gb: ramCap,
             gpu_length_mm: (sel.gpu.specs && sel.gpu.specs.length_mm) || 0,
             case_max_gpu_length_mm: (sel.pcCase.specs && sel.pcCase.specs.max_gpu_length) || 0,
-            required_watts: calculateRequiredWatts(sel.cpu.specs.tdp || 65, sel.gpu.specs.vram || 8),
+            required_watts: calculateRequiredWatts(sel.cpu.specs.tdp || 65, sel.gpu.specs.vram || 8, cpuScore),
             psu_wattage: sel.psu.specs ? sel.psu.specs.wattage : 0
         },
         performance_metrics: {
@@ -2255,7 +2253,6 @@ function pcBuilderHelp() {
     print("\n  Analysis:");
     print("    section6_marketAnalysis()         Statistics by type");
     print("    section6_manufacturerBreakdown()  Products per maker");
-    print("    section6_highValueComponents()    Best score-per-dollar");
     print("\n  Order: CPU → Mobo → RAM → GPU → Storage → Cooler → PSU → Case → Done!\n");
 }
 
