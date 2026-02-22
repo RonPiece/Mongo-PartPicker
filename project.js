@@ -564,6 +564,7 @@ function section4_queries() {
     // 1. Simple query with Projection and use of limit
     // Finds CPUs with a score higher than 2,000 and shows only name, price, and score
     print("\n\n=== 1. Simple query with Projection and Limit ===");
+    print(">> Finds CPUs with a score higher than 2,000 and shows only name, price, and score:");
     db.components.find(
         { type: "CPU", "specs.score": { $gt: 2000 } },
         { name: 1, price: 1, "specs.score": 1, _id: 0 }
@@ -574,6 +575,7 @@ function section4_queries() {
     // Finds users who made an order that contains an item of type GPU
     // Method: Dot Notation - direct access into nested arrays
     print("\n\n=== 2. Query on Embedded Documents (Dot Notation) ===");
+    print(">> Finds users who made an order that contains an item of type GPU:");
     db.users.find(
         { "orders.items.type": "GPU" },
         { username: 1, email: 1, _id: 0 }
@@ -583,17 +585,18 @@ function section4_queries() {
     // 3. Query on referenced data (Referenced)
     // Step A: fetch the ID of the RTX 4090 GPU
     print("\n\n=== 3. Query on Referenced Data ===");
+    print(">> Step A: Fetch the ID of an RTX 4090 GPU");
     var gpuDoc = db.components.findOne({ name: { $regex: "RTX 4090", $options: "i" } });
 
     // Step B: find all builds that contain this component in their parts array
-    print(">> Builds containing RTX 4090:");
+    print(">> Step B: Find all builds containing this RTX 4090:");
     db.builds.find(
         { parts: gpuDoc._id },
         { build_name: 1, total_price: 1, _id: 0 }
     ).limit(3).forEach(printjson);
 
     // (Optional) Step C: Use those Object IDs to pull the actual component details from the components collection!
-    print(">> Pulling actual parts from a referenced array:");
+    print(">> Step C: Pull the actual parts from a referenced array in a build:");
     var myRig = db.builds.findOne(); // Fetch a rig to demonstrate pulling referenced components
     db.components.find(
         {
@@ -607,16 +610,19 @@ function section4_queries() {
     // 4. Combine sort, skip, limit, and convert to array
     // Finds the most expensive motherboards, skips the first 2, and takes the next 3
     print("\n\n=== 4. Sort, Skip, Limit, and toArray ===");
+    print(">> Finds the most expensive motherboards, skips the first 2, and takes the next 3:");
     var moboArray = db.components.find({ type: "Motherboard" })
         .sort({ price: -1 }) // Sort from expensive to cheap
         .skip(2)             // Skip the 2 most expensive
         .limit(3)            // Show the next 3
+        .toArray();          // Convert to a JavaScript array
     printjson(moboArray);
 
 
     // 5. Using a forEach loop
     // Iterate over cheap RAM kits (under $40) and perform an action (print) for each document
     print("\n\n=== 5. Using a forEach loop ===");
+    print(">> Iterates over RAM kits under $40 and prints a custom formatted string:");
     db.components.find({ type: "RAM", price: { $lt: 40 } })
         .limit(3)
         .forEach(function (ram) {
@@ -627,6 +633,7 @@ function section4_queries() {
     // 6. Complex logical query ($or + Regex)
     // Search for cases (Case) from ASUS or MSI (text search)
     print("\n\n=== 6. Complex logical query ($or + Regex) ===");
+    print(">> Searches for Cases from EITHER ASUS or MSI using case-insensitive regex:");
     db.components.find(
         {
             type: "Case",
@@ -642,11 +649,13 @@ function section4_queries() {
     // 7. Count
     // Check how many components exist in total in the catalog
     print("\n\n=== 7. Count ===");
+    print(">> Checks how many total components exist in the catalog:");
     print("Total components in DB: ");
     print(db.components.count({}));
 
     // 7.1 Count with a query
     // Check how many components exist in total in the catalog , There is maybe cpu's without a price.
+    print("\n>> Checks specifically how many CPUs exist:");
     print("Total CPUs in DB: ");
     print(db.components.count({ type: "CPU" }));
 
@@ -654,6 +663,7 @@ function section4_queries() {
     // 8. $in operator - Query multiple types at once
     // Finds components that are either a CPU or GPU, sorted by price (expensive first)
     print("\n\n=== 8. $in operator ===");
+    print(">> Finds components that are either a CPU or GPU, sorted by price (expensive first):");
     db.components.find(
         { type: { $in: ["CPU", "GPU"] }, price: { $type: "number" } },
         { name: 1, type: 1, price: 1, _id: 0 }
@@ -663,6 +673,7 @@ function section4_queries() {
     // 9. $exists + array index check - Find components that have reviews
     // Uses "reviews.0" ($exists) to verify the array is non-empty
     print("\n\n=== 9. $exists + array index check ===");
+    print(">> Finds components with reviews, ensuring the reviews array is not empty:");
     db.components.find(
         { reviews: { $exists: true }, "reviews.0": { $exists: true } },
         { name: 1, type: 1, "reviews.user": 1, "reviews.rating": 1, _id: 0 }
@@ -672,6 +683,7 @@ function section4_queries() {
     // 10. cursor .count() (deprecated but required per spec)
     // Counts the number of GPUs with a numeric price
     print("\n\n=== 10. Cursor .count() ===");
+    print(">> Counts the number of GPUs that have a numeric price field:");
     print("Total GPUs with a valid price: ");
     print(db.components.find({ type: "GPU", price: { $type: "number" } }).count());
 
@@ -679,6 +691,7 @@ function section4_queries() {
     // 11. $and with range query ($gte + $lte)
     // Finds GPUs priced between $300 and $800 - shows combining logical operators
     print("\n\n=== 11. $and with range query ===");
+    print(">> Finds GPUs priced between $300 and $800:");
     db.components.find(
         {
             $and: [
@@ -693,6 +706,7 @@ function section4_queries() {
     // 12 $and with $or and range ($gte + $lte)
     // Finds powerful CPUs (Score >= 2000) under $500 that are EITHER from Intel OR AMD
     print("\n\n=== 12. Nested $and + $or + range ===");
+    print(">> Finds powerful CPUs (Score >= 2000) under $500 from EITHER Intel OR AMD:");
     db.components.find(
         {
             $and: [
@@ -713,6 +727,7 @@ function section4_queries() {
     // 13 $and with $gte, $lte, and specific nested field
     // Finds RAM kits that are 32GB or larger, faster than 6000MHz, and cost between $100 and $250
     print("\n\n=== 13. Logical operators on nested fields ===");
+    print(">> Finds RAM kits >= 32GB, >= 6000MHz, costing between $100 and $250:");
     db.components.find(
         {
             $and: [
@@ -730,6 +745,7 @@ function section4_queries() {
     // 14 $and + $or + Regex combined
     // Finds Motherboards that are EITHER from ASUS or Gigabyte, AND support DDR5 RAM, AND cost less than $300
     print("\n\n=== 14. Complex combo ($and, $or, $regex) ===");
+    print(">> Finds Motherboards EITHER from ASUS or Gigabyte, supporting DDR5, costing < $300:");
     db.components.find(
         {
             $and: [
