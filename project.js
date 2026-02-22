@@ -781,25 +781,38 @@ function section4_queries() {
 // Section 5: Updates & Deletes
 // Run:  section5_updatesAndDeletes()
 // ============================================================
-
 function section5_updatesAndDeletes() {
 
     // 1. $set - Update standard fields
     // Updates the score and adds a new boolean field 'is_featured'
+    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, "specs.score": 1, is_featured: 1, _id: 0 })
+
     db.components.updateOne(
         { name: "Intel Core i5-14600K" },
         { $set: { "specs.score": 33000, is_featured: true } }
     );
 
+    // Restore the original score after the $set demo (cores×100 + base_clock×50 = 14×100 + 3.5×50 = 1575)
+    db.components.updateOne(
+        { name: "Intel Core i5-14600K" },
+        { $set: { "specs.score": 1575 } }
+    );
+
+
     // 2. $push - Add to array
     // Adds a new review object to the 'reviews' array
+    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 })
+
     db.components.updateOne(
         { name: "AMD Ryzen 7 7800X3D" },
         { $push: { reviews: { user: "newreviewer", rating: 5, comment: "Excellent!", date: new Date() } } }
     );
 
+
     // 3. $pull - Remove from array
     // Removes the specific review we just added (cleanup)
+    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 })
+
     db.components.updateOne(
         { name: "AMD Ryzen 7 7800X3D" },
         { $pull: { reviews: { user: "newreviewer" } } }
@@ -807,10 +820,14 @@ function section5_updatesAndDeletes() {
 
     // 4. updateMany - Bulk update
     // Sets 'in_stock: true' for all documents in the collection
+    db.components.find({}, { name: 1, in_stock: 1, _id: 0 }).limit(3)
+
     db.components.updateMany({}, { $set: { in_stock: true } });
 
     // 5. $inc - Mathematical calculation (Increment)
     // Increases price by 10
+    db.components.find({ manufacturer: "NVIDIA", price: { $type: "number" } }, { name: 1, price: 1, _id: 0 }).limit(2)
+
     db.components.updateMany(
         { manufacturer: "NVIDIA", price: { $type: "number" } },
         { $inc: { price: 10 } }
@@ -824,13 +841,18 @@ function section5_updatesAndDeletes() {
 
     // 6. $addToSet - Add to array without duplicates
     // Adds the 'Best Seller' tag only if it doesn't already exist
+    db.components.find({ type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" }, { name: 1, tags: 1, _id: 0 }).limit(1)
+
     db.components.updateOne(
         { type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" },
         { $addToSet: { tags: "Best Seller" } }
     );
 
+
     // 7. $pop - Remove from end of array
     // Removes the last element from the 'price_history' array
+    db.components.find({ name: "Samsung 990 Pro 2TB" }, { name: 1, price_history: 1, _id: 0 })
+
     db.components.updateOne(
         { name: "Samsung 990 Pro 2TB" },
         { $pop: { price_history: 1 } }
@@ -838,23 +860,23 @@ function section5_updatesAndDeletes() {
 
     // 8. $unset - Remove field completely
     // Deletes the 'is_featured' field from the document
+    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, is_featured: 1, _id: 0 })
+
     db.components.updateOne(
         { name: "Intel Core i5-14600K" },
         { $unset: { is_featured: "" } }
     );
 
-    // Restore the original score after the $set demo (cores×100 + base_clock×50 = 14×100 + 3.5×50 = 1575)
-    db.components.updateOne(
-        { name: "Intel Core i5-14600K" },
-        { $set: { "specs.score": 1575 } }
-    );
-
     // 9. deleteOne - Delete a single document
     // Inserts a temporary document and then deletes it
+    print("Total documents named TEMP-DELETE-ME: " + db.components.count({ name: "TEMP-DELETE-ME" }));
+
     db.components.insertOne({
         _id: ObjectId(), type: "Demo", name: "TEMP-DELETE-ME", price: 0
     });
+
     db.components.deleteOne({ name: "TEMP-DELETE-ME" });
+
 
     // --- Collection Management ---
 
@@ -862,35 +884,37 @@ function section5_updatesAndDeletes() {
     // Duplicates the entire 'builds' collection to 'builds_backup'
     db.builds_backup.drop();
     db.builds.aggregate([{ $match: {} }, { $out: "builds_backup" }]);
+    print("Backup builds collection count: " + db.builds_backup.count());
 
     // 11. Partial collection backup (by criterion)
     // Creates a backup containing only 'Gaming' builds
     db.gaming_builds.drop();
     db.builds.aggregate([{ $match: { usage_type: "Gaming" } }, { $out: "gaming_builds" }]);
+    print("Gaming builds collection count: " + db.gaming_builds.count());
 
-    // 12. Drop collection
-    // Deletes the 'gaming_builds' collection entirely
-    db.gaming_builds.drop();
-
-    // 13. Partial data deletion (deleteMany with criterion)
+    // 12. Partial data deletion (deleteMany with criterion)
     // Create a temporary collection first
-    db.demo_ops.drop();
     db.components.aggregate([{ $match: { type: "CPU" } }, { $out: "demo_ops" }]);
+    print("Total CPUs in temporary demo_ops collection: " + db.demo_ops.count());
 
+    // 12.1 deleteMany
     // Deletes only CPUs cheaper than $200 from the demo collection
     db.demo_ops.deleteMany({ price: { $lt: 200 } });
 
-    // 14. Rename collection and final cleanup
+    // 12.2 Rename collection and final cleanup
     // Renames 'demo_ops' to 'demo_ops_renamed'
     db.demo_ops.renameCollection("demo_ops_renamed", true);
+    print("Total CPUs in renamed demo_ops_renamed collection: " + db.demo_ops_renamed.count());
 
+    // 12.3 deleteMany
     // Deletes all documents within the renamed collection
     db.demo_ops_renamed.deleteMany({});
 
+    // 12.4 drop()
     // Drops the empty collection
     db.demo_ops_renamed.drop();
 
-    // 15. remove() - Delete using legacy method (required by syllabus)
+    // 13. remove() - Delete using legacy method
     // Creates a temporary collection and uses remove()
     db.temp_remove_demo.drop();
     db.components.aggregate([
@@ -898,14 +922,13 @@ function section5_updatesAndDeletes() {
         { $limit: 3 },
         { $out: "temp_remove_demo" }
     ]);
+    print("Total PSUs in temporary temp_remove_demo collection: " + db.temp_remove_demo.count());
 
     // Explicitly using 'remove' as requested in the requirements
     db.temp_remove_demo.remove({ "specs.wattage": { $lt: 700 } })
 
     db.temp_remove_demo.drop();
-
-} // end section5_updatesAndDeletes()
-
+}
 // ============================================================
 // Section 6: Interactive PC Builder (Incremental Selection)
 // ============================================================
