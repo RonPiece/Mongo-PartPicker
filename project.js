@@ -555,7 +555,7 @@ function getRamCount() {
 }
 
 // ============================================================
-// Section 4: Search and Retrieval (Queries) - clean version
+// Section 4: Search and Retrieval (Queries)
 // Run:  section4_queries()
 // ============================================================
 
@@ -563,60 +563,70 @@ function section4_queries() {
 
     // 1. Simple query with Projection and use of limit
     // Finds CPUs with a score higher than 2,000 and shows only name, price, and score
+    print("\n\n=== 1. Simple query with Projection and Limit ===");
     db.components.find(
         { type: "CPU", "specs.score": { $gt: 2000 } },
         { name: 1, price: 1, "specs.score": 1, _id: 0 }
-    ).limit(3)
+    ).limit(3).forEach(printjson);
 
 
     // 2. Query on embedded documents and arrays (Embedded)
     // Finds users who made an order that contains an item of type GPU
     // Method: Dot Notation - direct access into nested arrays
+    print("\n\n=== 2. Query on Embedded Documents (Dot Notation) ===");
     db.users.find(
         { "orders.items.type": "GPU" },
         { username: 1, email: 1, _id: 0 }
-    ).limit(3)
+    ).limit(3).forEach(printjson);
 
 
     // 3. Query on referenced data (Referenced)
     // Step A: fetch the ID of the RTX 4090 GPU
+    print("\n\n=== 3. Query on Referenced Data ===");
     var gpuDoc = db.components.findOne({ name: { $regex: "RTX 4090", $options: "i" } });
 
     // Step B: find all builds that contain this component in their parts array
+    print(">> Builds containing RTX 4090:");
     db.builds.find(
         { parts: gpuDoc._id },
         { build_name: 1, total_price: 1, _id: 0 }
-    ).limit(3)
+    ).limit(3).forEach(printjson);
 
     // (Optional) Step C: Use those Object IDs to pull the actual component details from the components collection!
+    print(">> Pulling actual parts from a referenced array:");
+    var myRig = db.builds.findOne(); // Fetch a rig to demonstrate pulling referenced components
     db.components.find(
         {
             _id: { $in: myRig.parts },
             type: { $in: ["GPU", "Storage"] }
         },
         { type: 1, name: 1, price: 1, _id: 0 }
-    )
+    ).forEach(printjson);
 
 
     // 4. Combine sort, skip, limit, and convert to array
     // Finds the most expensive motherboards, skips the first 2, and takes the next 3
-    db.components.find({ type: "Motherboard" })
+    print("\n\n=== 4. Sort, Skip, Limit, and toArray ===");
+    var moboArray = db.components.find({ type: "Motherboard" })
         .sort({ price: -1 }) // Sort from expensive to cheap
         .skip(2)             // Skip the 2 most expensive
         .limit(3)            // Show the next 3
+    printjson(moboArray);
 
 
     // 5. Using a forEach loop
     // Iterate over cheap RAM kits (under $40) and perform an action (print) for each document
+    print("\n\n=== 5. Using a forEach loop ===");
     db.components.find({ type: "RAM", price: { $lt: 40 } })
         .limit(3)
         .forEach(function (ram) {
             print(">> Great deal! The RAM " + ram.name + " costs only $" + ram.price);
-        })
+        });
 
 
     // 6. Complex logical query ($or + Regex)
     // Search for cases (Case) from ASUS or MSI (text search)
+    print("\n\n=== 6. Complex logical query ($or + Regex) ===");
     db.components.find(
         {
             type: "Case",
@@ -626,41 +636,49 @@ function section4_queries() {
             ]
         },
         { name: 1, price: 1, _id: 0 }
-    ).limit(3)
+    ).limit(3).forEach(printjson);
 
 
     // 7. Count
     // Check how many components exist in total in the catalog
-    db.components.count({})
+    print("\n\n=== 7. Count ===");
+    print("Total components in DB: ");
+    print(db.components.count({}));
 
     // 7.1 Count with a query
     // Check how many components exist in total in the catalog , There is maybe cpu's without a price.
-    db.components.count({ type: "CPU" })
+    print("Total CPUs in DB: ");
+    print(db.components.count({ type: "CPU" }));
 
 
     // 8. $in operator - Query multiple types at once
     // Finds components that are either a CPU or GPU, sorted by price (expensive first)
+    print("\n\n=== 8. $in operator ===");
     db.components.find(
         { type: { $in: ["CPU", "GPU"] }, price: { $type: "number" } },
         { name: 1, type: 1, price: 1, _id: 0 }
-    ).sort({ price: -1 }).limit(3)
+    ).sort({ price: -1 }).limit(3).forEach(printjson);
 
 
     // 9. $exists + array index check - Find components that have reviews
     // Uses "reviews.0" ($exists) to verify the array is non-empty
+    print("\n\n=== 9. $exists + array index check ===");
     db.components.find(
         { reviews: { $exists: true }, "reviews.0": { $exists: true } },
         { name: 1, type: 1, "reviews.user": 1, "reviews.rating": 1, _id: 0 }
-    ).limit(5)
+    ).limit(5).forEach(printjson);
 
 
     // 10. cursor .count() (deprecated but required per spec)
     // Counts the number of GPUs with a numeric price
-    db.components.find({ type: "GPU", price: { $type: "number" } }).count()
+    print("\n\n=== 10. Cursor .count() ===");
+    print("Total GPUs with a valid price: ");
+    print(db.components.find({ type: "GPU", price: { $type: "number" } }).count());
 
 
-    // 11. Explicit $and with range query ($gte + $lte)
+    // 11. $and with range query ($gte + $lte)
     // Finds GPUs priced between $300 and $800 - shows combining logical operators
+    print("\n\n=== 11. $and with range query ===");
     db.components.find(
         {
             $and: [
@@ -670,10 +688,11 @@ function section4_queries() {
             ]
         },
         { name: 1, price: 1, "specs.chipset": 1, _id: 0 }
-    ).sort({ price: 1 }).limit(5)
+    ).sort({ price: 1 }).limit(5).forEach(printjson);
 
     // 12 $and with $or and range ($gte + $lte)
     // Finds powerful CPUs (Score >= 2000) under $500 that are EITHER from Intel OR AMD
+    print("\n\n=== 12. Nested $and + $or + range ===");
     db.components.find(
         {
             $and: [
@@ -689,10 +708,11 @@ function section4_queries() {
             ]
         },
         { name: 1, manufacturer: 1, price: 1, "specs.score": 1, _id: 0 }
-    ).sort({ "specs.score": -1 }).limit(5)
+    ).sort({ "specs.score": -1 }).limit(5).forEach(printjson);
 
     // 13 $and with $gte, $lte, and specific nested field
     // Finds RAM kits that are 32GB or larger, faster than 6000MHz, and cost between $100 and $250
+    print("\n\n=== 13. Logical operators on nested fields ===");
     db.components.find(
         {
             $and: [
@@ -704,11 +724,12 @@ function section4_queries() {
             ]
         },
         { name: 1, "specs.capacity_gb": 1, "specs.speed_mhz": 1, price: 1, _id: 0 }
-    ).limit(3)
+    ).limit(3).forEach(printjson);
 
 
-    // 14 Complex $and + $or + Regex combined
+    // 14 $and + $or + Regex combined
     // Finds Motherboards that are EITHER from ASUS or Gigabyte, AND support DDR5 RAM, AND cost less than $300
+    print("\n\n=== 14. Complex combo ($and, $or, $regex) ===");
     db.components.find(
         {
             $and: [
@@ -724,7 +745,7 @@ function section4_queries() {
             ]
         },
         { name: 1, "specs.ram_type": 1, price: 1, _id: 0 }
-    ).limit(3)
+    ).limit(3).forEach(printjson);
 
 
 } // end section4_queries()
@@ -1458,7 +1479,6 @@ function stepMotherboard(cpuIndex) {
 
 // ============================================================
 // Step 3: RAM Selection
-// Section 4: find().sort().limit() — filtered by DDR type
 // ============================================================
 
 // Step 3: Filters RAM by DDR type from motherboard, enforces capacity and speed limits
@@ -1553,7 +1573,6 @@ function stepRAM(moboIndex) {
 
 // ============================================================
 // Step 4: GPU Selection
-// Section 4: find().sort().limit() — best score in budget
 // ============================================================
 
 // Step 4: Finds best GPU by score within budget. Surplus from prior steps feeds GPU cap.
@@ -1625,7 +1644,6 @@ function stepGPU(ramIndex) {
 
 // ============================================================
 // Step 5: Storage Selection
-// Section 4: find().sort().limit()
 // ============================================================
 
 // Step 5: Selects SSD storage within budget and capacity limits (HDDs excluded)
@@ -1688,7 +1706,6 @@ function stepStorage(gpuIndex) {
 
 // ============================================================
 // Step 6: CPU Cooler Selection
-// Section 4: find().sort().limit() — TDP-aware minimum
 // ============================================================
 
 // Step 6: Selects cooler matching CPU TDP. Blocks oversized or undersized coolers.
@@ -1780,7 +1797,6 @@ function stepCooler(storageIndex) {
 // ============================================================
 // Step 7: PSU Selection
 // Section 3: calculateRequiredWatts()
-// Section 4: find().sort().limit()
 // ============================================================
 
 // Step 7: Selects PSU meeting wattage requirement. Tier-matched to GPU price tier.
@@ -1942,7 +1958,6 @@ function stepCase(psuIndex) {
 // ============================================================
 // Step 9: Finalize Build
 // Section 3: calculateWeightedScore()
-// Section 4: insertOne()
 // Section 6: aggregate with $add + $out
 // ============================================================
 
