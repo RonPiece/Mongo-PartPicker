@@ -954,7 +954,34 @@ function section5_updatesAndDeletes() {
 
 
 // ============================================================
-// Section 3: Profile Configuration (JS function)
+// Layer 1: Global State & Constants
+// Shared variables that all layers below can reference.
+// ============================================================
+
+// Global Build State — shared across all step functions
+var buildState = {
+    budget: 0,
+    usage: "",
+    params: null,
+    spent: 0,
+    step: 0,
+    buildTier: 1,
+    minCosts: {},
+    lastResults: [],
+    selections: {
+        cpu: null, motherboard: null, ram: null, gpu: null,
+        storage: null, cooler: null, psu: null, pcCase: null
+    }
+};
+
+var MODERN_SOCKETS = ["AM4", "AM5", "LGA1200", "LGA1700", "LGA1851"];
+var TIER_NAMES = ["", "Entry", "Mid", "High", "Enthusiast"]; // 1-indexed
+
+
+// ============================================================
+// Layer 2: Pure JS Helper Functions
+// Profile config, scoring, wattage, compatibility, formatting.
+// No DB access — all pure JavaScript logic.
 // ============================================================
 
 /**
@@ -1002,10 +1029,6 @@ function getProfileParams(usageType) {
 }
 
 
-// ============================================================
-// Section 3: Scoring & Wattage (JS functions)
-// ============================================================
-
 /** Weighted performance score based on usage profile (e.g. Gaming: 60% GPU, 40% CPU) */
 function calculateWeightedScore(cpuScore, gpuScore, ramCapacity, weights) {
     return Math.round(
@@ -1043,8 +1066,7 @@ function getCoolerReserve(tdp, cpuScore) {
     return 15;
 }
 
-/**
- * Section 3: Form-factor compatibility check — does the case fit the motherboard?
+/** Form-factor compatibility check — does the case fit the motherboard?
  * Full Tower > ATX > MicroATX > Mini ITX
  */
 function caseSupportsMotherboard(caseForm, moboForm) {
@@ -1067,11 +1089,7 @@ function caseSupportsMotherboard(caseForm, moboForm) {
     return true; // unknown form factor → allow
 }
 
-
-// ============================================================
-// Section 3: Formatting Helpers — used by printComponentList()
-// ============================================================
-
+// Formatting Helpers - used by printComponentList()
 function padRight(str, len) {
     str = String(str);
     while (str.length < len) str += " ";
@@ -1095,37 +1113,17 @@ function truncate(str, max) {
 
 
 // ============================================================
-// Global Build State — shared across all step functions
-// Tracks budget, selections, tier, and the last result list (for pick())
+// Layer 3: Data Access & DB Queries
+// MongoDB Aggregation queries for tier boundaries,
+// minimum costs, and budget reservation logic.
 // ============================================================
 
-var buildState = {
-    budget: 0,
-    usage: "",
-    params: null,
-    spent: 0,
-    step: 0,
-    buildTier: 1,
-    minCosts: {},
-    lastResults: [],
-    selections: {
-        cpu: null, motherboard: null, ram: null, gpu: null,
-        storage: null, cooler: null, psu: null, pcCase: null
-    }
-};
-
-var MODERN_SOCKETS = ["AM4", "AM5", "LGA1200", "LGA1700", "LGA1851"];
-
-
-// ============================================================
-// Section 6: Tier System — Price-Based Component Quality Tiers
-// aggregate with $match, $sort, $group ($push, $sum),
-// $project ($multiply, $floor, $arrayElemAt)
-// ============================================================
+// --- Aggregation: Tier Boundaries ---
 
 /**
- * Section 6: Computes tier boundaries by price percentile from DB.
+ * Computes tier boundaries by price percentile from DB.
  * Entry (0–25%), Mid (25–60%), High (60–85%), Enthusiast (85%+)
+ * Uses: $match, $sort, $group ($push, $sum), $project ($multiply, $floor, $arrayElemAt)
  */
 function getTierBoundaries(type) {
     var result = db.components.aggregate([
@@ -1149,11 +1147,6 @@ function getTierBoundaries(type) {
     return result[0] || { entry_max: 100, mid_max: 300, high_max: 600 };
 }
 
-var TIER_NAMES = ["", "Entry", "Mid", "High", "Enthusiast"]; // 1-indexed
-
-// Modern CPU sockets — filters out ancient LGA775/AM2/FM2 etc.
-var MODERN_SOCKETS = ["AM4", "AM5", "LGA1200", "LGA1700", "LGA1851"];
-
 // Returns which price tier (1-4) a component falls into based on tier boundaries
 function priceTier(price, bounds) {
     if (price <= bounds.entry_max) return 1;
@@ -1170,14 +1163,11 @@ function tierToFloor(minTier, bounds) {
     return bounds.high_max;
 }
 
-
-// ============================================================
-// Section 3 + 6: Dynamic Budget Helpers
-// ============================================================
+// --- Aggregation: Budget Helpers ---
 
 /**
  * Queries DB once to find the cheapest price per component type.
- * Section 6: aggregate with $group + $min accumulator
+ * Uses: $match, $group with $min accumulator
  */
 function getMinCosts() {
     var result = db.components.aggregate([
@@ -1236,10 +1226,11 @@ function futureReserve(types) {
 
 
 // ============================================================
-// Helper: Print formatted component list
+// Layer 4: Controllers & UI
+// State mutation, formatted output, user interaction flow.
 // ============================================================
 
-// Helper: Prints a formatted table of components with dynamic columns
+// Prints a formatted table of components with dynamic columns
 function printComponentList(results, columns) {
     if (results.length === 0) {
         print("  (no components found)");
@@ -1275,12 +1266,6 @@ function printComponentList(results, columns) {
     print("");
 }
 
-
-// ============================================================
-// pick(index) — Universal selection shortcut
-// validateAndSave(index, key, newStep) — Extract repeated pattern
-// ============================================================
-
 // Shortcut: calls the next step function. User calls pick(3) to select item #3.
 function pick(index) {
     var next = buildState.step + 1;
@@ -1296,7 +1281,7 @@ function pick(index) {
 }
 
 /**
- * Section 3: validates index, saves selection, updates spent.
+ * Validates index, saves selection, updates spent.
  * @returns {object|null} — the selected component, or null on error
  */
 function validateAndSave(index, key, newStep) {
