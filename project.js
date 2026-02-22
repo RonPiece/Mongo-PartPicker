@@ -2278,20 +2278,23 @@ function pcBuilderHelp() {
 // ============================================================
 // Load Message — prints available commands on load()
 // ============================================================
-
 print("");
 print("  ╔════════════════════════════════════════════════════════════╗");
-print("  ║  ✓ project.js loaded — data seeded, functions ready.        ║");
+print("  ║  ✓ project.js loaded — data seeded, functions ready.       ║");
 print("  ║                                                            ║");
-print("  ║  Run manually:                                             ║");
-print("  ║    section4_queries()             Search & Retrieval        ║");
-print("  ║    section5_updatesAndDeletes()   Updates & Deletes         ║");
-print("  ║    section6_marketAnalysis()      Aggregation Pipeline      ║");
-print("  ║    section6_manufacturerBreakdown()                         ║");
-print("  ║    startBuild(1500, 'gaming')     Interactive Builder       ║");
-print("  ║    section7_mapReduce()           MapReduce Analysis        ║");
-print("  ║    section7_manufacturerStats()                             ║");
-print("  ║    section7_ratingDistribution()                            ║");
+print("  ║  [Run Automatically or Manually]                           ║");
+print("  ║    section4_queries()             Search & Retrieval       ║");
+print("  ║                                                            ║");
+print("  ║  [Run Manually Only (Query-by-Query)]                      ║");
+print("  ║    section5_updatesAndDeletes()   Updates & Deletes        ║");
+print("  ║                                                            ║");
+print("  ║  [Run Automatically]                                       ║");
+print("  ║    section6_marketAnalysis()      Aggregation Pipeline     ║");
+print("  ║    section6_manufacturerBreakdown()                        ║");
+print("  ║    startBuild(1500, 'gaming')     Interactive Builder      ║");
+print("  ║    section7_mapReduce()           MapReduce Analysis       ║");
+print("  ║    section7_manufacturerStats()                            ║");
+print("  ║    section7_ratingDistribution()                           ║");
 print("  ╚════════════════════════════════════════════════════════════╝");
 print("");
 
