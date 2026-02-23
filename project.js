@@ -943,8 +943,8 @@ function section5_updatesAndDeletes() {
 //   getMinCosts(), futureReserve(), validateAndSave()
 //
 // Usage:
-//   load("project_section6_interactive.js")
-//   stepCPU(1500, "gaming")   → shows top CPUs
+//   load("project.js")
+//   startBuild(1500, "gaming")   → shows top CPUs
 //   pick(3)                    → picks #3, shows next step
 //   ...                        → keep picking until done
 //
@@ -2120,10 +2120,10 @@ function finalizeBuild(caseIndex) {
     print("  ╚════════════════════════════════════════════════════════════════╝");
 
     if (overBudget) {
-        print("\n  ⚠ Over budget by " + pct + "%. Consider cheaper options.");
+        print("\n Over budget by " + pct);
     }
     print("\n  ✓ Saved to 'recommended_combos' ($add + $out)");
-    print("  → stepCPU(budget, 'usage') for a new build\n");
+    print("  → startBuild(budget, 'usage') for a new build\n");
 
     buildState.step = 0;
     return completeBuild;
@@ -2246,6 +2246,7 @@ function pcBuilderHelp() {
     print("\n  Analysis:");
     print("    section6_marketAnalysis()         Statistics by type");
     print("    section6_manufacturerBreakdown()  Products per maker");
+    print("    section7_mapReduce(samples, min, max)  MapReduce Analysis");
     print("\n  Order: CPU → Mobo → RAM → GPU → Storage → Cooler → PSU → Case → Done!\n");
 }
 
@@ -2267,7 +2268,7 @@ print("  ║  [Run Automatically]                                       ║");
 print("  ║    section6_marketAnalysis()      Aggregation Pipeline     ║");
 print("  ║    section6_manufacturerBreakdown()                        ║");
 print("  ║    startBuild(1500, 'gaming')     Interactive Builder      ║");
-print("  ║    section7_mapReduce()           MapReduce Analysis       ║");
+print("  ║    section7_mapReduce(samples, min, max)  MapReduce Analysis ║");
 print("  ║    section7_manufacturerStats()                            ║");
 print("  ║    section7_ratingDistribution()                           ║");
 print("  ╚════════════════════════════════════════════════════════════╝");
@@ -2279,7 +2280,7 @@ print("");
 // ============================================================
 
 /**
- * Silently runs the full interactive pipeline (stepCPU → ... → finalizeBuild)
+ * Silently runs the full interactive pipeline (startBuild → ... → finalizeBuild)
  * for a given budget and usageType, and returns the build document.
  * Each step automatically picks the first (best) option in the list.
  * @param {number} budget   - Maximum build budget
@@ -2377,10 +2378,10 @@ function generateRecommendedCombosSamples(samplesPerUsage, minBudget, maxBudget)
 
 // Section 7 main: Generates sample builds, then runs MapReduce to find the best build per price tier
 function section7_mapReduce(samples, minBudget, maxBudget) {
-    // Runs generateRecommendedCombosSamples (uses stepCPU pipeline) then MapReduce on results.
+    // Runs generateRecommendedCombosSamples (uses startBuild pipeline) then MapReduce on results.
     // samples = number of budget sample points per usage type (gaming/workstation/budget/enthusiast)
     // Total builds = samples × 4 usage types
-    var n = (samples !== null && samples !== undefined) ? samples : 30;
+    var n = (samples !== null && samples !== undefined) ? samples : 10;
     var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 900;
     var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 4000;
 
@@ -2555,12 +2556,12 @@ function section7_ratingDistribution() {
 }
 
 // Recommended manual run order:
-// 1) load("project.js")                → Automatically loads data, creates collections, seeds builds & users
-// 2) section4_queries()              → Search and Retrieval (11 queries)
-// 3) section5_updatesAndDeletes()    → Updates & Deletes (15 operations)
+// 1) load("project.js")              → Automatically loads data, creates collections, seeds builds & users
+// 2) section4_queries()              → Search and Retrieval (14 queries)
+// 3) section5_updatesAndDeletes()    → Updates & Deletes (13 operations)
 // 4) section6_marketAnalysis()       → Aggregation: Market Analysis
 //    section6_manufacturerBreakdown()→ Aggregation: Manufacturer Breakdown
 //    startBuild(1500, 'gaming')      → Interactive PC Builder
-// 5) section7_mapReduce()            → MapReduce: Best Builds Per Tier
+// 5) section7_mapReduce(samples, min, max)   → MapReduce: Best Builds Per Tier
 //    section7_manufacturerStats()    → MapReduce: Manufacturer Stats
 //    section7_ratingDistribution()   → MapReduce: Rating Distribution
