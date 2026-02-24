@@ -1344,15 +1344,26 @@ function startBuild(budget, usageType) {
 
     // Dynamic cap: profile ratio cap, clamped by future minimums
     var reserve = futureReserve(["Motherboard", "RAM", "GPU", "Storage", "CPU Cooler", "Power Supply", "Case"]);
-    var maxCpuPrice = Math.min(
-        Math.round(budget * buildState.params.cpuCap),
-        budget - reserve
-    );
+    var absoluteMin = Math.max(300, buildState.minCosts["CPU"] + reserve);
 
     print("");
     print("  ╔════════════════════════════════════════════════════════╗");
     print("  ║   PC Builder - " + padRight(buildState.params.name + "  $" + budget, 40) + "║");
     print("  ╚════════════════════════════════════════════════════════╝");
+
+    if (budget < absoluteMin) {
+        print("  \u26a0\ufe0f ERROR: Budget " + formatPrice(budget) + " is too low!");
+        print("     Absolute minimum for a working PC is " + formatPrice(absoluteMin) + ".");
+        print("     Please run startBuild() again with a higher budget.");
+        buildState.lastResults = [];
+        return "0 CPUs found";
+    }
+
+    var maxCpuPrice = Math.min(
+        Math.round(budget * buildState.params.cpuCap),
+        budget - reserve
+    );
+
     print("  STEP 1/8 - CPU  (max " + formatPrice(maxCpuPrice) + ")");
 
     // Section 6: Aggregation Pipeline
@@ -2355,6 +2366,8 @@ function generateRecommendedCombosSamples(samplesPerUsage, minBudget, maxBudget)
     // Drop is handled by caller (section7_mapReduce) - this function only inserts
 
     var batch = [];
+    var totalGen = usages.length * n;
+
     for (var u = 0; u < usages.length; u++) {
         var usage = usages[u];
         for (var i = 0; i < n; i++) {
@@ -2363,6 +2376,12 @@ function generateRecommendedCombosSamples(samplesPerUsage, minBudget, maxBudget)
             var budget = Math.round(minB + (maxB - minB) * t);
             var doc = buildComputerByBudgetDoc(budget, usage);
             if (doc) batch.push(doc);
+
+            // Progress indicator for large runs
+            var curr = (u * n) + i + 1;
+            if (curr % 25 === 0 || curr === totalGen) {
+                print("    \u21bb Simulated " + curr + " / " + totalGen + " builds...");
+            }
         }
     }
 
