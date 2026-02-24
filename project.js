@@ -2433,7 +2433,7 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
         var label = "$" + lo + (hi === Infinity ? "+" : "-$" + hi);
         tierBounds.push({ lo: lo, hi: hi, label: label });
     }
-    print("[Section 7] Tier boundaries (based on actual prices): " + tierBounds.map(function (b) { return b.label }).join(", "));
+    // Removed the theoretical tier boundaries print from here
 
     // Section 7: Map - assigns each build to a dynamic budget tier
     // _tierBounds_ passed via scope - MapReduce scope variable
@@ -2496,8 +2496,17 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
     });
 
     var ended = new Date();
+
+    // Query actual populated tiers from the output collection
+    var actualTiers = [];
+    var buildDocs = db.best_builds_per_tier.find().toArray();
+    for (var b = 0; b < buildDocs.length; b++) {
+        actualTiers.push(buildDocs[b]._id);
+    }
+    print("[Section 7] Active Tiers (populated with builds): " + actualTiers.join(", "));
+
     print("[Section 7] Done in " + Math.round((ended - started) / 1000) + "s");
-    return { best_builds_per_tier: db.best_builds_per_tier.countDocuments() };
+    return { best_builds_per_tier: buildDocs.length };
 }
 
 
