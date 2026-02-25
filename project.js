@@ -80,7 +80,7 @@ if (!__mppLoadedData) {
 // All transformation functions are now in data.js (Section 3)
 // ============================================================
 
-// Section 3: Batch insert utility function (JS helper for efficient inserts)
+// Batch insert utility function (Section 3 JS helper, used by Section 2 inserts below)
 function batchInsert(arr, batchSize) {
     batchSize = batchSize || 1000;
     for (var i = 0; i < arr.length; i += batchSize) {
@@ -428,91 +428,90 @@ db.users.insertMany([
     }
 ])
 
-    ;
+    // ============================================================
+    // Seed Demo Data: reviews + price_history (so Sections 4-5 examples are meaningful)
+    // ============================================================
 
-// ============================================================
-// Seed Demo Data: reviews + price_history (so Sections 4-5 examples are meaningful)
-// ============================================================
+    // IIFE: injects reviews[] and price_history[] into select components via updateOne + $set
+    // Leading semicolon is a defensive JS pattern - prevents errors if a previous statement forgot its semicolon
+    ; (function seedDemoEngagement() {
+        function isNumber(x) { return typeof x === "number" && !isNaN(x); }
+        // Generates a 3-point price history (8% below → 2% below → 3% above current price)
+        function mkHistory(p) {
+            if (!isNumber(p)) return [];
+            var p1 = Math.max(1, Math.round((p * 0.92) * 100) / 100);
+            var p2 = Math.max(1, Math.round((p * 0.98) * 100) / 100);
+            var p3 = Math.max(1, Math.round((p * 1.03) * 100) / 100);
+            return [
+                { date: ISODate("2024-01-15"), price: p1 },
+                { date: ISODate("2024-06-01"), price: p2 },
+                { date: ISODate("2024-11-20"), price: p3 }
+            ];
+        }
 
-// IIFE: injects reviews[] and price_history[] into select components via updateOne + $set
-; (function seedDemoEngagement() {
-    function isNumber(x) { return typeof x === "number" && !isNaN(x); }
-    // Generates a 3-point price history (8% below → 2% below → 3% above current price)
-    function mkHistory(p) {
-        if (!isNumber(p)) return [];
-        var p1 = Math.max(1, Math.round((p * 0.92) * 100) / 100);
-        var p2 = Math.max(1, Math.round((p * 0.98) * 100) / 100);
-        var p3 = Math.max(1, Math.round((p * 1.03) * 100) / 100);
-        return [
-            { date: ISODate("2024-01-15"), price: p1 },
-            { date: ISODate("2024-06-01"), price: p2 },
-            { date: ISODate("2024-11-20"), price: p3 }
-        ];
-    }
-
-    var rtx4090 = db.components.find({ type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090", price: { $type: "number" } }, { _id: 1, price: 1 }).sort({ price: 1 }).limit(1).toArray()[0];
-    if (rtx4090) {
-        db.components.updateOne(
-            { _id: rtx4090._id },
-            {
-                $set: {
-                    reviews: [
-                        { user: "gamer2024", rating: 5, comment: "Insane performance for 4K.", date: ISODate("2024-05-01") },
-                        { user: "streamer1", rating: 4, comment: "Great, but power hungry.", date: ISODate("2024-07-10") }
-                    ],
-                    price_history: mkHistory(rtx4090.price)
+        var rtx4090 = db.components.find({ type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090", price: { $type: "number" } }, { _id: 1, price: 1 }).sort({ price: 1 }).limit(1).toArray()[0];
+        if (rtx4090) {
+            db.components.updateOne(
+                { _id: rtx4090._id },
+                {
+                    $set: {
+                        reviews: [
+                            { user: "gamer2024", rating: 5, comment: "Insane performance for 4K.", date: ISODate("2024-05-01") },
+                            { user: "streamer1", rating: 4, comment: "Great, but power hungry.", date: ISODate("2024-07-10") }
+                        ],
+                        price_history: mkHistory(rtx4090.price)
+                    }
                 }
-            }
-        );
-    }
+            );
+        }
 
-    var i9 = db.components.findOne({ name: "Intel Core i9-14900K" }, { _id: 1, price: 1 });
-    if (i9) {
-        db.components.updateOne(
-            { _id: i9._id },
-            {
-                $set: {
-                    reviews: [
-                        { user: "videoeditor", rating: 5, comment: "Excellent for heavy multi-thread workloads.", date: ISODate("2024-03-18") }
-                    ],
-                    price_history: mkHistory(i9.price)
+        var i9 = db.components.findOne({ name: "Intel Core i9-14900K" }, { _id: 1, price: 1 });
+        if (i9) {
+            db.components.updateOne(
+                { _id: i9._id },
+                {
+                    $set: {
+                        reviews: [
+                            { user: "videoeditor", rating: 5, comment: "Excellent for heavy multi-thread workloads.", date: ISODate("2024-03-18") }
+                        ],
+                        price_history: mkHistory(i9.price)
+                    }
                 }
-            }
-        );
-    }
+            );
+        }
 
-    var ryzen7800 = db.components.findOne({ name: "AMD Ryzen 7 7800X3D" }, { _id: 1, price: 1 });
-    if (ryzen7800) {
-        db.components.updateOne(
-            { _id: ryzen7800._id },
-            {
-                $set: {
-                    reviews: [
-                        { user: "budgetgamer", rating: 5, comment: "Best gaming CPU for the money.", date: ISODate("2024-04-22") },
-                        { user: "gamer2024", rating: 5, comment: "Cool and fast.", date: ISODate("2024-05-02") }
-                    ],
-                    price_history: mkHistory(ryzen7800.price)
+        var ryzen7800 = db.components.findOne({ name: "AMD Ryzen 7 7800X3D" }, { _id: 1, price: 1 });
+        if (ryzen7800) {
+            db.components.updateOne(
+                { _id: ryzen7800._id },
+                {
+                    $set: {
+                        reviews: [
+                            { user: "budgetgamer", rating: 5, comment: "Best gaming CPU for the money.", date: ISODate("2024-04-22") },
+                            { user: "gamer2024", rating: 5, comment: "Cool and fast.", date: ISODate("2024-05-02") }
+                        ],
+                        price_history: mkHistory(ryzen7800.price)
+                    }
                 }
-            }
-        );
-    }
+            );
+        }
 
-    var ssd990 = db.components.findOne({ name: "Samsung 990 Pro 2TB" }, { _id: 1, price: 1 });
-    if (ssd990) {
-        db.components.updateOne(
-            { _id: ssd990._id },
-            {
-                $set: {
-                    reviews: [
-                        { user: "firsttimebuilder", rating: 5, comment: "Super fast boot and load times.", date: ISODate("2024-08-10") }
-                    ],
-                    price_history: mkHistory(ssd990.price)
+        var ssd990 = db.components.findOne({ name: "Samsung 990 Pro 2TB" }, { _id: 1, price: 1 });
+        if (ssd990) {
+            db.components.updateOne(
+                { _id: ssd990._id },
+                {
+                    $set: {
+                        reviews: [
+                            { user: "firsttimebuilder", rating: 5, comment: "Super fast boot and load times.", date: ISODate("2024-08-10") }
+                        ],
+                        price_history: mkHistory(ssd990.price)
+                    }
                 }
-            }
-        );
-    }
+            );
+        }
 
-})();
+    })();
 
 print("\n  ✓ Data loaded and seeded successfully.");
 
@@ -646,7 +645,7 @@ function section4_queries() {
         {
             type: "Case",
             $or: [
-                { name: { $regex: "ASUS", $options: "i" } }, // i stand for case insensitive
+                { name: { $regex: "ASUS", $options: "i" } }, // "i" stands for case insensitive
                 { name: { $regex: "MSI", $options: "i" } }
             ]
         },
@@ -711,7 +710,7 @@ function section4_queries() {
         { name: 1, price: 1, "specs.chipset": 1, _id: 0 }
     ).sort({ price: 1 }).limit(5).forEach(printjson);
 
-    // 12 $and with $or and range ($gte + $lte)
+    // 12. $and with $or and range ($gte + $lte)
     // Finds powerful CPUs (Score >= 2000) under $500 that are EITHER from Intel OR AMD
     print("\n\n=== 12. Nested $and + $or + range ===");
     print(">> Finds powerful CPUs (Score >= 2000) under $500 from EITHER Intel OR AMD:");
@@ -732,7 +731,7 @@ function section4_queries() {
         { name: 1, manufacturer: 1, price: 1, "specs.score": 1, _id: 0 }
     ).sort({ "specs.score": -1 }).limit(5).forEach(printjson);
 
-    // 13 $and with $gte, $lte, and specific nested field
+    // 13. $and with $gte, $lte, and specific nested field
     // Finds RAM kits that are 32GB or larger, faster than 6000MHz, and cost between $100 and $250
     print("\n\n=== 13. Logical operators on nested fields ===");
     print(">> Finds RAM kits >= 32GB, >= 6000MHz, costing between $100 and $250:");
@@ -750,7 +749,7 @@ function section4_queries() {
     ).limit(3).forEach(printjson);
 
 
-    // 14 $and + $or + Regex combined
+    // 14. $and + $or + Regex combined
     // Finds Motherboards that are EITHER from ASUS or Gigabyte, AND support DDR5 RAM, AND cost less than $300
     print("\n\n=== 14. Complex combo ($and, $or, $regex) ===");
     print(">> Finds Motherboards EITHER from ASUS or Gigabyte, supporting DDR5, costing < $300:");
@@ -783,12 +782,17 @@ function section5_updatesAndDeletes() {
 
     // 1. $set - Update standard fields
     // Updates the score and adds a new boolean field 'is_featured'
-    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, "specs.score": 1, is_featured: 1, _id: 0 })
+    print("\n\n=== 1. $set - Update standard fields ===");
+    print(">> Before:");
+    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, "specs.score": 1, is_featured: 1, _id: 0 }).forEach(printjson);
 
     db.components.updateOne(
         { name: "Intel Core i5-14600K" },
         { $set: { "specs.score": 33000, is_featured: true } }
     );
+
+    print(">> After:");
+    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, "specs.score": 1, is_featured: 1, _id: 0 }).forEach(printjson);
 
     // Restore the original score after the $set demo (cores×100 + base_clock×50 = 14×100 + 3.5×50 = 1575)
     db.components.updateOne(
@@ -799,37 +803,57 @@ function section5_updatesAndDeletes() {
 
     // 2. $push - Add to array
     // Adds a new review object to the 'reviews' array
-    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 })
+    print("\n\n=== 2. $push - Add to array ===");
+    print(">> Before:");
+    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 }).forEach(printjson);
 
     db.components.updateOne(
         { name: "AMD Ryzen 7 7800X3D" },
         { $push: { reviews: { user: "newreviewer", rating: 5, comment: "Excellent!", date: new Date() } } }
     );
 
+    print(">> After:");
+    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 }).forEach(printjson);
+
 
     // 3. $pull - Remove from array
     // Removes the specific review we just added (cleanup)
-    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 })
+    print("\n\n=== 3. $pull - Remove from array ===");
+    print(">> Before:");
+    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 }).forEach(printjson);
 
     db.components.updateOne(
         { name: "AMD Ryzen 7 7800X3D" },
         { $pull: { reviews: { user: "newreviewer" } } }
     );
 
+    print(">> After:");
+    db.components.find({ name: "AMD Ryzen 7 7800X3D" }, { name: 1, reviews: 1, _id: 0 }).forEach(printjson);
+
     // 4. updateMany - Bulk update
     // Sets 'in_stock: true' for all documents in the collection
-    db.components.find({}, { name: 1, in_stock: 1, _id: 0 }).limit(3)
+    print("\n\n=== 4. updateMany - Bulk update ===");
+    print(">> Before (sample):");
+    db.components.find({}, { name: 1, in_stock: 1, _id: 0 }).limit(3).forEach(printjson);
 
     db.components.updateMany({}, { $set: { in_stock: true } });
 
+    print(">> After (sample):");
+    db.components.find({}, { name: 1, in_stock: 1, _id: 0 }).limit(3).forEach(printjson);
+
     // 5. $inc - Mathematical calculation (Increment)
     // Increases price by 10
-    db.components.find({ manufacturer: "NVIDIA", price: { $type: "number" } }, { name: 1, price: 1, _id: 0 }).limit(2)
+    print("\n\n=== 5. $inc - Mathematical calculation ===");
+    print(">> Before:");
+    db.components.find({ manufacturer: "NVIDIA", price: { $type: "number" } }, { name: 1, price: 1, _id: 0 }).limit(2).forEach(printjson);
 
     db.components.updateMany(
         { manufacturer: "NVIDIA", price: { $type: "number" } },
         { $inc: { price: 10 } }
     );
+
+    print(">> After (+$10):");
+    db.components.find({ manufacturer: "NVIDIA", price: { $type: "number" } }, { name: 1, price: 1, _id: 0 }).limit(2).forEach(printjson);
 
     // Reverts to original price (Decreases by 10)
     db.components.updateMany(
@@ -839,94 +863,142 @@ function section5_updatesAndDeletes() {
 
     // 6. $addToSet - Add to array without duplicates
     // Adds the 'Best Seller' tag only if it doesn't already exist
-    db.components.find({ type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" }, { name: 1, tags: 1, _id: 0 }).limit(1)
+    print("\n\n=== 6. $addToSet - Add to array without duplicates ===");
+    print(">> Before:");
+    db.components.find({ type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" }, { name: 1, tags: 1, _id: 0 }).limit(1).forEach(printjson);
 
     db.components.updateOne(
         { type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" },
         { $addToSet: { tags: "Best Seller" } }
     );
 
+    print(">> After:");
+    db.components.find({ type: "GPU", manufacturer: "NVIDIA", "specs.chipset": "GeForce RTX 4090" }, { name: 1, tags: 1, _id: 0 }).limit(1).forEach(printjson);
+
 
     // 7. $pop - Remove from end of array
     // Removes the last element from the 'price_history' array
-    db.components.find({ name: "Samsung 990 Pro 2TB" }, { name: 1, price_history: 1, _id: 0 })
+    print("\n\n=== 7. $pop - Remove from end of array ===");
+    print(">> Before:");
+    db.components.find({ name: "Samsung 990 Pro 2TB" }, { name: 1, price_history: 1, _id: 0 }).forEach(printjson);
 
     db.components.updateOne(
         { name: "Samsung 990 Pro 2TB" },
         { $pop: { price_history: 1 } }
     );
 
+    print(">> After:");
+    db.components.find({ name: "Samsung 990 Pro 2TB" }, { name: 1, price_history: 1, _id: 0 }).forEach(printjson);
+
     // 8. $unset - Remove field completely
     // Deletes the 'is_featured' field from the document
-    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, is_featured: 1, _id: 0 })
+    print("\n\n=== 8. $unset - Remove field completely ===");
+    print(">> Before:");
+    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, is_featured: 1, _id: 0 }).forEach(printjson);
 
     db.components.updateOne(
         { name: "Intel Core i5-14600K" },
         { $unset: { is_featured: "" } }
     );
 
+    print(">> After:");
+    db.components.find({ name: "Intel Core i5-14600K" }, { name: 1, is_featured: 1, _id: 0 }).forEach(printjson);
+
     // 9. deleteOne - Delete a single document
     // Inserts a temporary document and then deletes it
-    print("Total documents named TEMP-DELETE-ME: " + db.components.count({ name: "TEMP-DELETE-ME" }));
+    print("\n\n=== 9. deleteOne - Delete a single document ===");
+    print(">> Step A: Inserting a temporary document { name: 'TEMP-DELETE-ME' }...");
 
     db.components.insertOne({
         _id: ObjectId(), type: "Demo", name: "TEMP-DELETE-ME", price: 0
     });
+    print(">> Step B: Document exists? count = " + db.components.count({ name: "TEMP-DELETE-ME" }));
+    db.components.find({ name: "TEMP-DELETE-ME" }, { name: 1, type: 1, price: 1, _id: 0 }).forEach(printjson);
 
+    print(">> Step C: Calling deleteOne({ name: 'TEMP-DELETE-ME' })...");
     db.components.deleteOne({ name: "TEMP-DELETE-ME" });
+    print(">> Result: count = " + db.components.count({ name: "TEMP-DELETE-ME" }) + " (document deleted)");
 
 
-    // --- Collection Management ---
+    // ============================================================
+    // Collection Management
+    // ============================================================
 
     // 10. Full collection backup ($out)
     // Duplicates the entire 'builds' collection to 'builds_backup'
+    print("\n\n=== 10. Full collection backup ($out) ===");
+    print(">> Copying ALL documents from 'builds' into a new 'builds_backup' collection...");
     db.builds_backup.drop();
     db.builds.aggregate([{ $match: {} }, { $out: "builds_backup" }]);
-    print("Backup builds collection count: " + db.builds_backup.count());
+    print(">> Original 'builds' count: " + db.builds.count());
+    print(">> Backup 'builds_backup' count: " + db.builds_backup.count());
 
     // 11. Partial collection backup (by criterion)
     // Creates a backup containing only 'Gaming' builds
+    print("\n\n=== 11. Partial collection backup (by criterion) ===");
+    print(">> Filtering 'builds' where usage_type = 'Gaming' and saving to 'gaming_builds'...");
     db.gaming_builds.drop();
     db.builds.aggregate([{ $match: { usage_type: "Gaming" } }, { $out: "gaming_builds" }]);
-    print("Gaming builds collection count: " + db.gaming_builds.count());
+    print(">> Total builds in original collection: " + db.builds.count());
+    print(">> Gaming-only builds backed up: " + db.gaming_builds.count());
+    print(">> Backed up build names:");
+    db.gaming_builds.find({}, { build_name: 1, usage_type: 1, _id: 0 }).forEach(printjson);
 
     // 12. Partial data deletion (deleteMany with criterion)
     // Create a temporary collection first
+    print("\n\n=== 12. Partial data deletion (multi-step demo) ===");
+    print(">> 12.0 - Creating temporary 'demo_ops' collection with all CPUs...");
     db.components.aggregate([{ $match: { type: "CPU" } }, { $out: "demo_ops" }]);
-    print("Total CPUs in temporary demo_ops collection: " + db.demo_ops.count());
+    print("   Total CPUs copied: " + db.demo_ops.count());
 
     // 12.1 deleteMany
     // Deletes only CPUs cheaper than $200 from the demo collection
-    db.demo_ops.deleteMany({ price: { $lt: 200 } });
+    print("\n>> 12.1 - deleteMany: Removing CPUs cheaper than $200...");
+    var deleteResult = db.demo_ops.deleteMany({ price: { $lt: 200 } });
+    print("   Deleted: " + deleteResult.deletedCount + " cheap CPUs");
+    print("   Remaining: " + db.demo_ops.count() + " CPUs");
 
     // 12.2 Rename collection and final cleanup
     // Renames 'demo_ops' to 'demo_ops_renamed'
+    print("\n>> 12.2 - renameCollection: Renaming 'demo_ops' → 'demo_ops_renamed'...");
     db.demo_ops.renameCollection("demo_ops_renamed", true);
-    print("Total CPUs in renamed demo_ops_renamed collection: " + db.demo_ops_renamed.count());
+    print("   'demo_ops_renamed' count: " + db.demo_ops_renamed.count());
 
     // 12.3 deleteMany
     // Deletes all documents within the renamed collection
+    print("\n>> 12.3 - deleteMany({}): Deleting ALL remaining documents...");
     db.demo_ops_renamed.deleteMany({});
+    print("   'demo_ops_renamed' count after deleteMany: " + db.demo_ops_renamed.count());
 
     // 12.4 drop()
     // Drops the empty collection
+    print("\n>> 12.4 - drop(): Dropping the empty collection entirely...");
     db.demo_ops_renamed.drop();
+    print("   Collection 'demo_ops_renamed' dropped successfully");
 
     // 13. remove() - Delete using legacy method
     // Creates a temporary collection and uses remove()
+    print("\n\n=== 13. remove() - Delete using legacy method ===");
+    print(">> Creating temporary collection with 3 Power Supplies...");
     db.temp_remove_demo.drop();
     db.components.aggregate([
         { $match: { type: "Power Supply" } },
         { $limit: 3 },
         { $out: "temp_remove_demo" }
     ]);
-    print("Total PSUs in temporary temp_remove_demo collection: " + db.temp_remove_demo.count());
+    print(">> Before remove - PSUs in collection: " + db.temp_remove_demo.count());
+    db.temp_remove_demo.find({}, { name: 1, "specs.wattage": 1, _id: 0 }).forEach(printjson);
 
     // Explicitly using 'remove' as requested in the requirements
-    db.temp_remove_demo.remove({ "specs.wattage": { $lt: 700 } })
+    print("\n>> Calling remove({ specs.wattage: { $lt: 700 } }) - deletes PSUs under 700W...");
+    db.temp_remove_demo.remove({ "specs.wattage": { $lt: 700 } });
+    print(">> After remove - PSUs remaining: " + db.temp_remove_demo.count());
+    db.temp_remove_demo.find({}, { name: 1, "specs.wattage": 1, _id: 0 }).forEach(printjson);
 
     db.temp_remove_demo.drop();
+    print(">> Cleanup: temp_remove_demo dropped");
 }
+
 // ============================================================
 // Section 6: Interactive PC Builder (Incremental Selection)
 // ============================================================
@@ -2131,7 +2203,7 @@ function finalizeBuild(caseIndex) {
     print("  ╚════════════════════════════════════════════════════════════════╝");
 
     if (overBudget) {
-        print("\n Over budget by " + pct);
+        print("\n Over budget by " + pct + "%");
     }
     print("\n  ✓ Saved to 'recommended_combos' ($add + $out)");
     print("  → startBuild(budget, 'usage') for a new build\n");
@@ -2433,7 +2505,6 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
         var label = "$" + lo + (hi === Infinity ? "+" : "-$" + hi);
         tierBounds.push({ lo: lo, hi: hi, label: label });
     }
-    // Removed the theoretical tier boundaries print from here
 
     // Section 7: Map - assigns each build to a dynamic budget tier
     // _tierBounds_ passed via scope - MapReduce scope variable

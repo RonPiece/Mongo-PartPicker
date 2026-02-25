@@ -8,3 +8,6 @@ SECTION6_EXPLANATION.md
 
 # Kiro related files
 .kiro/
+
+# Local quickstart guide (personal reference)
+QUICKSTART.md
