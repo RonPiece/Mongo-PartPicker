@@ -593,7 +593,13 @@ function section4_queries() {
     // Step A: fetch the ID of the RTX 4090 GPU
     print("\n\n=== 3. Query on Referenced Data ===");
     print(">> Step A: Fetch the ID of an RTX 4090 GPU");
-    var gpuDoc = db.components.findOne({ name: { $regex: "RTX 4090", $options: "i" } });
+    
+        var gpuDoc = db.components.find({ 
+        type: "GPU", 
+        manufacturer: "NVIDIA", 
+        "specs.chipset": "GeForce RTX 4090",
+        price: { $type: "number" }
+    }).sort({ price: 1 }).limit(1).toArray()[0];
 
     // Step B: find all builds that contain this component in their parts array
     print(">> Step B: Find all builds containing this RTX 4090:");
@@ -602,7 +608,7 @@ function section4_queries() {
         { build_name: 1, total_price: 1, _id: 0 }
     ).limit(3).forEach(printjson);
 
-    // (Optional) Step C: Use those Object IDs to pull the actual component details from the components collection!
+    // (Optional) Use those Object IDs to pull the actual component details from the components collection!
     print(">> Step C: Pull the actual parts from a referenced array in a build:");
     var myRig = db.builds.findOne(); // Fetch a rig to demonstrate pulling referenced components
     db.components.find(
