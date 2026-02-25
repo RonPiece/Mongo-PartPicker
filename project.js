@@ -685,7 +685,7 @@ function section4_queries() {
     ).limit(5).forEach(printjson);
 
 
-    // 10. count() (deprecated but required per spec)
+    // 10. count()
     // Counts the number of GPUs with a numeric price
     print("\n\n=== 10. count() ===");
     print(">> Counts the number of GPUs that have a numeric price field:");
