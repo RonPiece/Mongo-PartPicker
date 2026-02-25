@@ -2349,7 +2349,7 @@ print("  ║  [Run Automatically]                                       ║");
 print("  ║    section6_marketAnalysis()      Aggregation Pipeline     ║");
 print("  ║    section6_manufacturerBreakdown()                        ║");
 print("  ║    startBuild(1500, 'gaming')     Interactive Builder      ║");
-print("  ║    section7_mapReduce(samples, min, max)  MapReduce Analysis ║");
+print("  ║    section7_mapReduce(samples, min, max) MapReduce Analysis║");
 print("  ║    section7_manufacturerStats()                            ║");
 print("  ║    section7_ratingDistribution()                           ║");
 print("  ╚════════════════════════════════════════════════════════════╝");
@@ -2577,7 +2577,6 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
     print("[Section 7] Done in " + Math.round((ended - started) / 1000) + "s");
     return { best_builds_per_tier: buildDocs.length };
 }
-
 
 // ============================================================
 // Section 7B: MapReduce - Manufacturer Stats
