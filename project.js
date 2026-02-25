@@ -6,7 +6,7 @@
 
 // ============================================================
 // Section 1: Data Modeling
-// Submitted in a separate file: data_modeling.md
+// Submitted in a separate file: PcPartBuilder.docx
 // ============================================================
 
 // ============================================================
@@ -593,10 +593,10 @@ function section4_queries() {
     // Step A: fetch the ID of the RTX 4090 GPU
     print("\n\n=== 3. Query on Referenced Data ===");
     print(">> Step A: Fetch the ID of an RTX 4090 GPU");
-    
-        var gpuDoc = db.components.find({ 
-        type: "GPU", 
-        manufacturer: "NVIDIA", 
+
+    var gpuDoc = db.components.find({
+        type: "GPU",
+        manufacturer: "NVIDIA",
         "specs.chipset": "GeForce RTX 4090",
         price: { $type: "number" }
     }).sort({ price: 1 }).limit(1).toArray()[0];
