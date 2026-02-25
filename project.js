@@ -2343,8 +2343,6 @@ print("  ║  ✓ project.js loaded - data seeded, functions ready.       ║");
 print("  ║                                                            ║");
 print("  ║  [Run Automatically or Manually]                           ║");
 print("  ║    section4_queries()             Search & Retrieval       ║");
-print("  ║                                                            ║");
-print("  ║  [Run Manually Only (Query-by-Query)]                      ║");
 print("  ║    section5_updatesAndDeletes()   Updates & Deletes        ║");
 print("  ║                                                            ║");
 print("  ║  [Run Automatically]                                       ║");
