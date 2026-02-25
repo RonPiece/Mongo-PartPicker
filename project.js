@@ -663,14 +663,12 @@ function section4_queries() {
     // Check how many components exist in total in the catalog
     print("\n\n=== 7. Count ===");
     print(">> Checks how many total components exist in the catalog:");
-    print("Total components in DB: ");
-    print(db.components.count({}));
+    print("Total components in DB: " + db.components.count({}));
 
     // 7.1 Count with a query
     // Check how many components exist in total in the catalog , There is maybe cpu's without a price.
     print("\n>> Checks specifically how many CPUs exist:");
-    print("Total CPUs in DB: ");
-    print(db.components.count({ type: "CPU" }));
+    print("Total CPUs in DB: " + db.components.count({ type: "CPU" }));
 
 
     // 8. $in operator - Query multiple types at once
@@ -693,12 +691,11 @@ function section4_queries() {
     ).limit(5).forEach(printjson);
 
 
-    // 10. count() (deprecated but required per spec)
+    // 10. count()
     // Counts the number of GPUs with a numeric price
     print("\n\n=== 10. count() ===");
     print(">> Counts the number of GPUs that have a numeric price field:");
-    print("Total GPUs with a valid price: ");
-    print(db.components.find({ type: "GPU", price: { $type: "number" } }).count());
+    print("Total GPUs with a valid price: " + db.components.find({ type: "GPU", price: { $type: "number" } }).count());
 
 
     // 11. $and with range query ($gte + $lte)
@@ -2477,7 +2474,7 @@ function section7_mapReduce(samples, minBudget, maxBudget) {
     // samples = number of budget sample points per usage type (gaming/workstation/budget/enthusiast)
     // Total builds = samples × 4 usage types
     var n = (samples !== null && samples !== undefined) ? samples : 10;
-    var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 900;
+    var minB = (minBudget !== null && minBudget !== undefined) ? minBudget : 500;
     var maxB = (maxBudget !== null && maxBudget !== undefined) ? maxBudget : 4000;
 
     var started = new Date();
@@ -2619,7 +2616,7 @@ function section7_manufacturerStats() {
         finalize: finalizeManufacturer
     });
 
-    print("[Section 7B] manufacturer_stats_mr: " + db.manufacturer_stats_mr.countDocuments() + " manufacturers");
+    print("[Section 7B] Components per manufacturer (price > $200): " + db.manufacturer_stats_mr.countDocuments() + " manufacturers");
     return db.manufacturer_stats_mr.find().toArray();
 }
 
@@ -2653,7 +2650,7 @@ function section7_ratingDistribution() {
         finalize: finalizeRatings
     });
 
-    print("[Section 7C] rating_distribution: " + db.rating_distribution.countDocuments() + " ratings");
+    print("[Section 7C] Review count per star rating (1-5): " + db.rating_distribution.countDocuments() + " distinct ratings");
     return db.rating_distribution.find().toArray();
 }
 
