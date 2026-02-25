@@ -600,6 +600,7 @@ function section4_queries() {
         "specs.chipset": "GeForce RTX 4090",
         price: { $type: "number" }
     }).sort({ price: 1 }).limit(1).toArray()[0];
+    printjson(gpuDoc);
 
     // Step B: find all builds that contain this component in their parts array
     print(">> Step B: Find all builds containing this RTX 4090:");
