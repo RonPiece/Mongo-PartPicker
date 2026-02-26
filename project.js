@@ -1394,9 +1394,18 @@ function validateAndSave(index, key, newStep) {
 
 // Step 1: Initializes build state and shows CPU options via aggregation pipeline
 function startBuild(budget, usageType) {
+    var rawUsage = (usageType || "gaming").toLowerCase();
+    var validUsages = ["gaming", "workstation", "budget", "enthusiast"];
+
+    if (validUsages.indexOf(rawUsage) === -1) {
+        print("\n  ⚠️ ERROR: Invalid usage type '" + usageType + "'.");
+        print("     Valid options are: 'gaming', 'workstation', 'budget', 'enthusiast'.\n");
+        return "Invalid usage type";
+    }
+
     buildState.budget = budget;
-    buildState.usage = usageType || "gaming";
-    buildState.params = getProfileParams(buildState.usage);
+    buildState.usage = getProfileParams(rawUsage).name;
+    buildState.params = getProfileParams(rawUsage);
     buildState.spent = 0;
     buildState.step = 1;
     buildState.minCosts = getMinCosts();
@@ -1471,7 +1480,7 @@ function startBuild(budget, usageType) {
         { key: "specs.tdp", label: "TDP", width: 6, suffix: "W" },
         { key: "specs.score", label: "Score", width: 8 }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., type \"pick(1)\" with the number you want)");
     return results.length + " CPUs found";
 }
 
@@ -1590,7 +1599,7 @@ function stepMotherboard(cpuIndex) {
         { key: "specs.ram_type", label: "RAM", width: 7 },
         { key: "specs.max_ram", label: "MaxRAM", width: 8, suffix: "GB" }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., pick(1))");
     return results.length + " motherboards found";
 }
 
@@ -1683,7 +1692,7 @@ function stepRAM(moboIndex) {
         { key: "specs.speed_mhz", label: "Speed", width: 9, suffix: "MHz" },
         { key: "specs.generation", label: "Gen", width: 6 }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., pick(1))");
     return results.length + " RAM kits found";
 }
 
@@ -1753,7 +1762,7 @@ function stepGPU(ramIndex) {
         { key: "specs.length_mm", label: "Length", width: 8, suffix: "mm" },
         { key: "specs.score", label: "Score", width: 8 }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., pick(1))");
     return results.length + " GPUs found";
 }
 
@@ -1814,7 +1823,7 @@ function stepStorage(gpuIndex) {
         { key: "specs.capacity_gb", label: "Size", width: 9, suffix: "GB" },
         { key: "specs.storage_type", label: "Type", width: 9 }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., pick(1))");
     return results.length + " drives found";
 }
 
@@ -1903,7 +1912,7 @@ function stepCooler(storageIndex) {
         { key: "specs.kind", label: "Type", width: 8 },
         { key: "specs.noise_level_db", label: "dB", width: 7 }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., pick(1))");
     return results.length + " coolers found";
 }
 
@@ -1971,7 +1980,7 @@ function stepPSU(coolerIndex) {
         { key: "specs.wattage", label: "Watts", width: 8, suffix: "W" },
         { key: "specs.efficiency", label: "Rating", width: 12 }
     ]);
-    print("  → pick(<#>)");
+    print("  → type pick(<#>) (e.g., pick(1))");
     return results.length + " PSUs found";
 }
 
@@ -2063,7 +2072,7 @@ function stepCase(psuIndex) {
         { key: "specs.max_gpu_length", label: "MaxGPU", width: 9, suffix: "mm" },
         { key: "gpu_clearance", label: "Clear.", width: 9, suffix: "mm" }
     ]);
-    print("  → pick(<#>) to finalize!");
+    print("  → type pick(<#>) to finalize! (e.g., pick(1))");
     return results.length + " cases found";
 }
 
@@ -2353,7 +2362,7 @@ print("  ║  [Run Automatically]                                       ║");
 print("  ║    section6_marketAnalysis()      Aggregation Pipeline     ║");
 print("  ║    section6_manufacturerBreakdown()                        ║");
 print("  ║    startBuild(1500, 'gaming')     Interactive Builder      ║");
-print("  ║    section7_mapReduce(samples, min, max) MapReduce Analysis║");
+print("  ║    section7_mapReduce(samples, min, max) MapReduce tiering ║");
 print("  ║    section7_manufacturerStats()                            ║");
 print("  ║    section7_ratingDistribution()                           ║");
 print("  ╚════════════════════════════════════════════════════════════╝");
@@ -2454,7 +2463,7 @@ function generateRecommendedCombosSamples(samplesPerUsage, minBudget, maxBudget)
             // Progress indicator for large runs
             var curr = (u * n) + i + 1;
             if (curr % 25 === 0 || curr === totalGen) {
-                print("    \u21bb Simulated " + curr + " / " + totalGen + " builds...");
+                print("Simulated " + curr + " / " + totalGen + " builds...");
             }
         }
     }
