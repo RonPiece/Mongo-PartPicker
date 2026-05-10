@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="https://webassets.mongodb.com/_com_assets/cms/mongodb_logo1-76twgcu2pi.png" alt="MongoPcPartPicker" width="300" />
-</p>
-
 <h1 align="center">MongoPcPartPicker (PC Part Builder)</h1>
 
 <p align="center">
@@ -80,20 +76,20 @@ erDiagram
     BUILDS }|--|{ COMPONENTS : "Referenced (Many:Many)"
     COMPONENTS ||--o{ REVIEWS : "Embedded (1:Few)"
 
-    class USERS {
+    USERS {
         ObjectId _id
         String username
         Array orders
         Array saved_builds
     }
-    class COMPONENTS {
+    COMPONENTS {
         ObjectId _id
         String type
         Object specs
         Object requirements
         Array reviews
     }
-    class BUILDS {
+    BUILDS {
         ObjectId _id
         String build_name
         Array parts
